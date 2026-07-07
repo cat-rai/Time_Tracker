@@ -95,8 +95,11 @@ const chartSvgEl = document.getElementById("pie-chart");
 const chartLegendEl = document.getElementById("chart-legend");
 const toggleByCategoryEl = document.getElementById("toggle-by-category");
 const toggleBySubcategoryEl = document.getElementById("toggle-by-subcategory");
+const togglePieChartEl = document.getElementById("toggle-pie-chart");
+const toggleBarChartEl = document.getElementById("toggle-bar-chart");
 
 let chartViewMode = "category"; // "category" or "subcategory"
+let chartType = "pie"; // "pie" or "bar"
 
 // Modal elements
 const modalEl = document.getElementById("subcategory-modal");
@@ -269,28 +272,76 @@ function renderPieChart() {
     currentAngle = endAngle;
   }
 
-  // Render legend
+  renderChartLegend(slices);
+}
+
+function renderBarChart() {
+  const data = getAggregatedData(chartViewMode);
+
+  if (data.length === 0) {
+    chartSvgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
+    chartLegendEl.innerHTML = "";
+    return;
+  }
+
+  const total = data.reduce((sum, d) => sum + d.ms, 0);
+  const bars = data.map((d, i) => ({
+    ...d,
+    percent: (d.ms / total) * 100,
+    color: CHART_COLORS[i % CHART_COLORS.length],
+  }));
+
+  // Draw bar chart
+  const svg = chartSvgEl;
+  svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 400 300");
+
+  const chartWidth = 350;
+  const chartHeight = 200;
+  const padding = 40;
+  const barSpacing = chartWidth / bars.length;
+  const barWidth = barSpacing * 0.8;
+
+  // Draw bars
+  bars.forEach((bar, i) => {
+    const barHeight = (bar.percent / 100) * chartHeight;
+    const x = padding + i * barSpacing + (barSpacing - barWidth) / 2;
+    const y = padding + chartHeight - barHeight;
+
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", barWidth);
+    rect.setAttribute("height", barHeight);
+    rect.setAttribute("fill", bar.color);
+    svg.appendChild(rect);
+  });
+
+  renderChartLegend(bars);
+}
+
+function renderChartLegend(items) {
   chartLegendEl.innerHTML = "";
-  for (const slice of slices) {
-    const item = document.createElement("div");
-    item.className = "legend-item";
+  for (const item of items) {
+    const div = document.createElement("div");
+    div.className = "legend-item";
 
     const colorBox = document.createElement("div");
     colorBox.className = "legend-color";
-    colorBox.style.backgroundColor = slice.color;
+    colorBox.style.backgroundColor = item.color;
 
     const label = document.createElement("span");
     label.className = "legend-label";
-    label.textContent = slice.label;
+    label.textContent = item.label;
 
     const time = document.createElement("span");
     time.className = "legend-time";
-    time.textContent = formatDuration(slice.ms);
+    time.textContent = formatDuration(item.ms);
 
-    item.appendChild(colorBox);
-    item.appendChild(label);
-    item.appendChild(time);
-    chartLegendEl.appendChild(item);
+    div.appendChild(colorBox);
+    div.appendChild(label);
+    div.appendChild(time);
+    chartLegendEl.appendChild(div);
   }
 }
 
@@ -416,7 +467,18 @@ function renderCategories() {
       btn.classList.add("active");
     }
     btn.textContent = cat.label;
-    btn.addEventListener("click", () => openSubcategoryModal(cat.id, cat.label));
+    btn.addEventListener("click", () => {
+      const running = getRunningSession();
+      if (running && running.categoryId === cat.id) {
+        // Toggle off: stop the running session
+        running.end = Date.now();
+        saveSessions(sessions);
+        render();
+      } else {
+        // Open modal to start new session
+        openSubcategoryModal(cat.id, cat.label);
+      }
+    });
     wrapper.appendChild(btn);
 
     // Edit button - create as a proper button with click handler
@@ -486,7 +548,7 @@ function render() {
   }
 
   renderCategories();
-  renderPieChart();
+  renderChart();
 
   // Today's sessions, newest first
   const now = Date.now();
@@ -608,19 +670,42 @@ modalEl.addEventListener("click", (e) => {
   }
 });
 
-// Chart toggle
+function renderChart() {
+  if (chartType === "pie") {
+    renderPieChart();
+  } else {
+    renderBarChart();
+  }
+}
+
+// Chart type toggle
+togglePieChartEl.addEventListener("click", () => {
+  chartType = "pie";
+  togglePieChartEl.classList.add("active");
+  toggleBarChartEl.classList.remove("active");
+  renderChart();
+});
+
+toggleBarChartEl.addEventListener("click", () => {
+  chartType = "bar";
+  toggleBarChartEl.classList.add("active");
+  togglePieChartEl.classList.remove("active");
+  renderChart();
+});
+
+// Chart view mode toggle
 toggleByCategoryEl.addEventListener("click", () => {
   chartViewMode = "category";
   toggleByCategoryEl.classList.add("active");
   toggleBySubcategoryEl.classList.remove("active");
-  renderPieChart();
+  renderChart();
 });
 
 toggleBySubcategoryEl.addEventListener("click", () => {
   chartViewMode = "subcategory";
   toggleBySubcategoryEl.classList.add("active");
   toggleByCategoryEl.classList.remove("active");
-  renderPieChart();
+  renderChart();
 });
 
 // --- Header date ----------------------------------------------------------

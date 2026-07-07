@@ -38,9 +38,15 @@
     <section class="chart-section">
       <div class="chart-header">
         <h2>Today</h2>
-        <div class="chart-toggle">
-          <button id="toggle-by-category" class="toggle-btn active">By Category</button>
-          <button id="toggle-by-subcategory" class="toggle-btn">By Subcategory</button>
+        <div style="display: flex; gap: 8px;">
+          <div class="chart-toggle">
+            <button id="toggle-pie-chart" class="toggle-btn active">Pie</button>
+            <button id="toggle-bar-chart" class="toggle-btn">Bar</button>
+          </div>
+          <div class="chart-toggle">
+            <button id="toggle-by-category" class="toggle-btn active">By Category</button>
+            <button id="toggle-by-subcategory" class="toggle-btn">By Subcategory</button>
+          </div>
         </div>
       </div>
       <div id="chart-container" class="chart-container">

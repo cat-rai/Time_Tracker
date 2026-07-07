@@ -176,7 +176,7 @@ function selectSubcategory(subcategory) {
 }
 
 function startSessionFromModal() {
-  if (!pendingCategoryForModal || !selectedSubcategoryForModal) {
+  if (!pendingCategoryForModal) {
     return;
   }
 
@@ -186,7 +186,7 @@ function startSessionFromModal() {
     // Update the running session
     const running = getRunningSession();
     if (running) {
-      running.subcategory = selectedSubcategoryForModal;
+      running.subcategory = selectedSubcategoryForModal || "";
       running.detail = detail;
       saveSessions(sessions);
     }
@@ -206,7 +206,7 @@ function startSessionFromModal() {
       start: now,
       end: null,
       category: pendingCategoryForModal,
-      subcategory: selectedSubcategoryForModal,
+      subcategory: selectedSubcategoryForModal || "",
       detail: detail,
     });
 

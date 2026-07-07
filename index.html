@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1115" />
+<title>Time Tracker</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Time Tracker</h1>
+      <div class="date" id="today-date"></div>
+    </header>
+
+    <main class="tracker">
+      <button id="track-btn" class="track-btn idle">
+        <span id="track-btn-label">Start</span>
+        <span id="live-timer" class="live-timer">00:00:00</span>
+      </button>
+    </main>
+
+    <section class="log">
+      <div class="log-header">
+        <h2>Today</h2>
+        <div class="log-total" id="today-total">0h 0m</div>
+      </div>
+      <ul id="session-list" class="session-list"></ul>
+      <p id="empty-state" class="empty-state">No sessions yet. Hit Start.</p>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

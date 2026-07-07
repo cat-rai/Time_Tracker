@@ -1,0 +1,193 @@
+:root {
+  --bg: #0f1115;
+  --surface: #181b21;
+  --surface-2: #21252d;
+  --text: #f2f3f5;
+  --text-dim: #9aa0ab;
+  --accent: #3ddc84;
+  --accent-dim: #2a7f52;
+  --stop: #ff5c5c;
+  --stop-dim: #7f2a2a;
+  --radius: 20px;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eceef1;
+    --text: #16181d;
+    --text-dim: #666c78;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) 20px calc(env(safe-area-inset-bottom) + 20px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 24px 0 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.date {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.tracker {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0 28px;
+}
+
+.track-btn {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.2s ease;
+  color: #0b0d10;
+  user-select: none;
+}
+
+.track-btn:active {
+  transform: scale(0.97);
+}
+
+.track-btn.idle {
+  background: var(--accent);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.track-btn.running {
+  background: var(--stop);
+  color: #fff;
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--stop) 18%, transparent);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--stop) 18%, transparent); }
+  50% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--stop) 10%, transparent); }
+}
+
+#track-btn-label {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.live-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.track-btn.idle .live-timer {
+  opacity: 0;
+  height: 0;
+}
+
+.log {
+  flex: 1;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px 18px 20px;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.log-header h2 {
+  font-size: 15px;
+  margin: 0;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.log-total {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.session-item:last-child {
+  border-bottom: none;
+}
+
+.session-item .time-range {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.session-item .duration {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-item.running .duration {
+  color: var(--accent);
+}
+
+.empty-state {
+  color: var(--text-dim);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 0;
+  margin: 0;
+}

@@ -122,6 +122,20 @@ const editCategoryCancelBtn = document.getElementById("edit-category-cancel");
 const editModalCloseBtnEl = document.getElementById("edit-modal-close-btn");
 let editingCategoryId = null;
 
+// Edit session modal elements
+const editSessionModalEl = document.getElementById("edit-session-modal");
+const editSessionCategoryEl = document.getElementById("edit-session-category");
+const editSessionStartEl = document.getElementById("edit-session-start");
+const editSessionEndEl = document.getElementById("edit-session-end");
+const editSessionDurationEl = document.getElementById("edit-session-duration");
+const editSessionSubcategoryEl = document.getElementById("edit-session-subcategory");
+const editSessionDetailEl = document.getElementById("edit-session-detail");
+const editSessionSaveBtn = document.getElementById("edit-session-save");
+const editSessionDeleteBtn = document.getElementById("edit-session-delete");
+const editSessionCancelBtn = document.getElementById("edit-session-cancel");
+const editSessionCloseBtnEl = document.getElementById("edit-session-close-btn");
+let editingSessionId = null;
+
 // --- Helpers --------------------------------------------------------------
 
 function getRunningSession() {
@@ -601,6 +615,113 @@ function saveEditCategory() {
   closeEditModal();
 }
 
+function openEditSessionModal(sessionId) {
+  const session = sessions.find(s => s.id === sessionId);
+  if (!session) return;
+
+  editingSessionId = sessionId;
+
+  // Set category
+  const categoryLabel = getCategoryLabel(session.categoryId || session.category);
+  editSessionCategoryEl.textContent = categoryLabel;
+
+  // Set times (convert ms to HH:MM format)
+  const startDate = new Date(session.start);
+  const endDate = new Date(session.end || Date.now());
+
+  editSessionStartEl.value = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }).substring(0, 5);
+  editSessionEndEl.value = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }).substring(0, 5);
+
+  // Set subcategory and detail
+  editSessionSubcategoryEl.value = session.subcategory || "";
+  editSessionDetailEl.value = session.detail || "";
+
+  // Update duration display
+  updateSessionDurationDisplay();
+
+  editSessionModalEl.classList.remove("hidden");
+}
+
+function closeEditSessionModal() {
+  editSessionModalEl.classList.add("hidden");
+  editingSessionId = null;
+}
+
+function updateSessionDurationDisplay() {
+  if (!editingSessionId) return;
+
+  const session = sessions.find(s => s.id === editingSessionId);
+  if (!session) return;
+
+  // Get the times from input fields and calculate duration
+  const startStr = editSessionStartEl.value;
+  const endStr = editSessionEndEl.value;
+
+  if (startStr && endStr) {
+    // Parse times
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
+
+    let startMs = startH * 3600000 + startM * 60000;
+    let endMs = endH * 3600000 + endM * 60000;
+
+    // Handle case where end time is next day
+    if (endMs < startMs) {
+      endMs += 24 * 3600000;
+    }
+
+    const durationMs = endMs - startMs;
+    editSessionDurationEl.textContent = formatDuration(durationMs);
+  }
+}
+
+function saveEditSession() {
+  if (!editingSessionId) return;
+
+  const session = sessions.find(s => s.id === editingSessionId);
+  if (!session) return;
+
+  // Parse and set times
+  const startStr = editSessionStartEl.value;
+  const endStr = editSessionEndEl.value;
+
+  if (startStr && endStr) {
+    const today = new Date();
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
+
+    const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), startH, startM);
+    let endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), endH, endM);
+
+    // Handle case where end time is next day
+    if (endDate < startDate) {
+      endDate.setDate(endDate.getDate() + 1);
+    }
+
+    session.start = startDate.getTime();
+    session.end = endDate.getTime();
+  }
+
+  // Update subcategory and detail
+  session.subcategory = editSessionSubcategoryEl.value.trim();
+  session.detail = editSessionDetailEl.value.trim();
+
+  saveSessions(sessions);
+  closeEditSessionModal();
+  render();
+}
+
+function deleteEditSession() {
+  if (!editingSessionId) return;
+
+  if (confirm("Delete this session?")) {
+    sessions = sessions.filter(s => s.id !== editingSessionId);
+    saveSessions(sessions);
+    closeEditSessionModal();
+    render();
+  }
+}
+
 function render() {
   const running = getRunningSession();
 
@@ -629,6 +750,8 @@ function render() {
   for (const s of todaySessions) {
     const li = document.createElement("li");
     li.className = "session-item" + (s.end === null ? " running" : "");
+    li.style.cursor = "pointer";
+    li.dataset.sessionId = s.id;
 
     const range = document.createElement("span");
     range.className = "time-range";
@@ -814,6 +937,30 @@ toggleBySubcategoryEl.addEventListener("click", () => {
   toggleBySubcategoryEl.classList.add("active");
   toggleByCategoryEl.classList.remove("active");
   renderChart();
+});
+
+// Edit session modal event listeners
+editSessionStartEl.addEventListener("change", updateSessionDurationDisplay);
+editSessionEndEl.addEventListener("change", updateSessionDurationDisplay);
+
+editSessionSaveBtn.addEventListener("click", saveEditSession);
+editSessionDeleteBtn.addEventListener("click", deleteEditSession);
+editSessionCancelBtn.addEventListener("click", closeEditSessionModal);
+editSessionCloseBtnEl.addEventListener("click", closeEditSessionModal);
+
+// Close edit session modal on backdrop click
+editSessionModalEl.addEventListener("click", (e) => {
+  if (e.target === editSessionModalEl) {
+    closeEditSessionModal();
+  }
+});
+
+// Session list click handler using event delegation
+sessionListEl.addEventListener("click", (e) => {
+  const sessionItem = e.target.closest(".session-item");
+  if (sessionItem && sessionItem.dataset.sessionId) {
+    openEditSessionModal(sessionItem.dataset.sessionId);
+  }
 });
 
 // --- Header date ----------------------------------------------------------

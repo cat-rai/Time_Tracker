@@ -139,6 +139,82 @@
     </div>
   </div>
 
+  <!-- Edit session modal -->
+  <div id="edit-session-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Edit Session</h2>
+        <button class="modal-close" id="edit-session-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Category (read-only) -->
+          <div>
+            <label style="font-size: 12px; color: var(--text-dim); font-weight: 600;">Category</label>
+            <div id="edit-session-category" style="padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text);"></div>
+          </div>
+
+          <!-- Start Time -->
+          <div>
+            <label for="edit-session-start" style="font-size: 12px; color: var(--text-dim); font-weight: 600; display: block; margin-bottom: 6px;">Start Time</label>
+            <input
+              id="edit-session-start"
+              type="time"
+              style="width: 100%; padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; font-family: inherit;"
+            />
+          </div>
+
+          <!-- End Time -->
+          <div>
+            <label for="edit-session-end" style="font-size: 12px; color: var(--text-dim); font-weight: 600; display: block; margin-bottom: 6px;">End Time</label>
+            <input
+              id="edit-session-end"
+              type="time"
+              style="width: 100%; padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; font-family: inherit;"
+            />
+          </div>
+
+          <!-- Duration Display -->
+          <div>
+            <label style="font-size: 12px; color: var(--text-dim); font-weight: 600;">Duration</label>
+            <div id="edit-session-duration" style="padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text);"></div>
+          </div>
+
+          <!-- Subcategory -->
+          <div>
+            <label for="edit-session-subcategory" style="font-size: 12px; color: var(--text-dim); font-weight: 600; display: block; margin-bottom: 6px;">Subcategory (optional)</label>
+            <input
+              id="edit-session-subcategory"
+              type="text"
+              placeholder="e.g., Project A, Meeting"
+              maxlength="30"
+              style="width: 100%; padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; font-family: inherit;"
+            />
+          </div>
+
+          <!-- Detail -->
+          <div>
+            <label for="edit-session-detail" style="font-size: 12px; color: var(--text-dim); font-weight: 600; display: block; margin-bottom: 6px;">Details (optional)</label>
+            <input
+              id="edit-session-detail"
+              type="text"
+              placeholder="e.g., What were you working on?"
+              maxlength="100"
+              style="width: 100%; padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; font-family: inherit;"
+            />
+          </div>
+
+          <!-- Buttons -->
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button id="edit-session-save" class="start-session-btn" style="flex: 1;">Save</button>
+            <button id="edit-session-delete" style="flex: 1; background: #ff5c5c; color: #0b0d10; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; padding: 12px 16px;">Delete</button>
+            <button id="edit-session-cancel" class="modal-close" style="flex: 1; background: var(--surface-2); color: var(--text);">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

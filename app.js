@@ -46,6 +46,14 @@ const emptyStateEl = document.getElementById("empty-state");
 const todayTotalEl = document.getElementById("today-total");
 const todayDateEl = document.getElementById("today-date");
 
+// Chart elements
+const chartSvgEl = document.getElementById("pie-chart");
+const chartLegendEl = document.getElementById("chart-legend");
+const toggleByCategoryEl = document.getElementById("toggle-by-category");
+const toggleBySubcategoryEl = document.getElementById("toggle-by-subcategory");
+
+let chartViewMode = "category"; // "category" or "subcategory"
+
 // Modal elements
 const modalEl = document.getElementById("subcategory-modal");
 const modalCategoryTitleEl = document.getElementById("modal-category-title");
@@ -113,6 +121,116 @@ function getCommonSubcategoriesForCategory(category) {
   }
 
   return subcategoryOrder;
+}
+
+// --- Chart functions -----------------------------------------------
+
+const CHART_COLORS = [
+  "#3ddc84", "#2a7f52", "#ff5c5c", "#7f2a2a", "#5c9cff", "#2a4a7f",
+  "#ffd700", "#7f7f2a", "#ff69b4", "#7f2a5c", "#00d4ff", "#2a7f7f",
+];
+
+function getAggregatedData(mode) {
+  const now = Date.now();
+  const todaySessions = sessions.filter((s) => isSameDay(s.start, now));
+
+  if (mode === "category") {
+    const data = {};
+    for (const session of todaySessions) {
+      const key = session.category;
+      const duration = (session.end ?? now) - session.start;
+      data[key] = (data[key] || 0) + duration;
+    }
+    return Object.entries(data).map(([label, ms]) => ({ label, ms }));
+  } else {
+    // "subcategory" mode: group by category + subcategory
+    const data = {};
+    for (const session of todaySessions) {
+      const key = session.subcategory
+        ? `${session.category} • ${session.subcategory}`
+        : session.category;
+      const duration = (session.end ?? now) - session.start;
+      data[key] = (data[key] || 0) + duration;
+    }
+    return Object.entries(data).map(([label, ms]) => ({ label, ms }));
+  }
+}
+
+function renderPieChart() {
+  const data = getAggregatedData(chartViewMode);
+
+  if (data.length === 0) {
+    chartSvgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
+    chartLegendEl.innerHTML = "";
+    return;
+  }
+
+  // Calculate total and percentages
+  const total = data.reduce((sum, d) => sum + d.ms, 0);
+  const slices = data.map((d, i) => ({
+    ...d,
+    percent: (d.ms / total) * 100,
+    color: CHART_COLORS[i % CHART_COLORS.length],
+  }));
+
+  // Draw pie chart
+  const svg = chartSvgEl;
+  svg.innerHTML = "";
+  const centerX = 200, centerY = 200, radius = 150;
+
+  let currentAngle = -Math.PI / 2; // Start at top
+
+  for (const slice of slices) {
+    const sliceAngle = (slice.percent / 100) * 2 * Math.PI;
+    const endAngle = currentAngle + sliceAngle;
+
+    const x1 = centerX + radius * Math.cos(currentAngle);
+    const y1 = centerY + radius * Math.sin(currentAngle);
+    const x2 = centerX + radius * Math.cos(endAngle);
+    const y2 = centerY + radius * Math.sin(endAngle);
+
+    const largeArc = sliceAngle > Math.PI ? 1 : 0;
+
+    const pathData = [
+      `M ${centerX} ${centerY}`,
+      `L ${x1} ${y1}`,
+      `A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`,
+      "Z",
+    ].join(" ");
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathData);
+    path.setAttribute("fill", slice.color);
+    path.setAttribute("stroke", "var(--bg)");
+    path.setAttribute("stroke-width", "2");
+    svg.appendChild(path);
+
+    currentAngle = endAngle;
+  }
+
+  // Render legend
+  chartLegendEl.innerHTML = "";
+  for (const slice of slices) {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+
+    const colorBox = document.createElement("div");
+    colorBox.className = "legend-color";
+    colorBox.style.backgroundColor = slice.color;
+
+    const label = document.createElement("span");
+    label.className = "legend-label";
+    label.textContent = slice.label;
+
+    const time = document.createElement("span");
+    time.className = "legend-time";
+    time.textContent = formatDuration(slice.ms);
+
+    item.appendChild(colorBox);
+    item.appendChild(label);
+    item.appendChild(time);
+    chartLegendEl.appendChild(item);
+  }
 }
 
 // --- Modal Logic -------------------------------------------------------
@@ -247,6 +365,7 @@ function render() {
   }
 
   renderCategories();
+  renderPieChart();
 
   // Today's sessions, newest first
   const now = Date.now();
@@ -362,6 +481,21 @@ modalEl.addEventListener("click", (e) => {
   if (e.target === modalEl) {
     closeSubcategoryModal();
   }
+});
+
+// Chart toggle
+toggleByCategoryEl.addEventListener("click", () => {
+  chartViewMode = "category";
+  toggleByCategoryEl.classList.add("active");
+  toggleBySubcategoryEl.classList.remove("active");
+  renderPieChart();
+});
+
+toggleBySubcategoryEl.addEventListener("click", () => {
+  chartViewMode = "subcategory";
+  toggleBySubcategoryEl.classList.add("active");
+  toggleByCategoryEl.classList.remove("active");
+  renderPieChart();
 });
 
 // --- Header date ----------------------------------------------------------

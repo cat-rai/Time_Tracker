@@ -35,9 +35,23 @@
       </div>
     </main>
 
+    <section class="chart-section">
+      <div class="chart-header">
+        <h2>Today</h2>
+        <div class="chart-toggle">
+          <button id="toggle-by-category" class="toggle-btn active">By Category</button>
+          <button id="toggle-by-subcategory" class="toggle-btn">By Subcategory</button>
+        </div>
+      </div>
+      <div id="chart-container" class="chart-container">
+        <svg id="pie-chart" viewBox="0 0 400 400"></svg>
+        <div id="chart-legend" class="chart-legend"></div>
+      </div>
+    </section>
+
     <section class="log">
       <div class="log-header">
-        <h2>Today</h2>
+        <h2>Sessions</h2>
         <div class="log-total" id="today-total">0h 0m</div>
       </div>
       <ul id="session-list" class="session-list"></ul>

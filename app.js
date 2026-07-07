@@ -483,8 +483,22 @@ function renderCategories() {
         saveSessions(sessions);
         render();
       } else {
-        // Open modal to start new session
-        openSubcategoryModal(cat.id, cat.label);
+        // Start new session directly (one-click start)
+        const now = Date.now();
+        if (running) {
+          running.end = now;
+        }
+        sessions.push({
+          id: crypto.randomUUID(),
+          start: now,
+          end: null,
+          categoryId: cat.id,
+          category: cat.id,
+          subcategory: "",
+          detail: "",
+        });
+        saveSessions(sessions);
+        render();
       }
     });
     wrapper.appendChild(btn);

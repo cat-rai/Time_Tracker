@@ -21,7 +21,11 @@ function saveSessions(sessions) {
 function loadCategories() {
   try {
     const raw = localStorage.getItem(CATEGORIES_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const data = raw ? JSON.parse(raw) : [];
+    // Ensure all categories have id and label
+    return data.map(cat =>
+      typeof cat === "string" ? { id: cat, label: cat } : cat
+    );
   } catch {
     return [];
   }
@@ -31,8 +35,48 @@ function saveCategories(categories) {
   localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
 }
 
+function migrateCategories() {
+  // Convert old string-based categories to objects with IDs
+  const oldCategories = loadCategories();
+  const sessions = loadSessions();
+
+  // Create a map of old category strings to new category objects
+  const categoryMap = {};
+  const newCategories = [];
+
+  // Get unique categories from existing data
+  const uniqueCategories = new Set();
+  for (const session of sessions) {
+    if (session.category) {
+      uniqueCategories.add(session.category);
+    }
+  }
+
+  // Convert to objects with IDs
+  for (const categoryStr of uniqueCategories) {
+    const catObj = oldCategories.find(c => (c.label || c) === categoryStr) ||
+                   { id: categoryStr, label: categoryStr };
+    if (!catObj.id) catObj.id = categoryStr;
+    if (!catObj.label) catObj.label = categoryStr;
+    newCategories.push(catObj);
+    categoryMap[categoryStr] = catObj.id;
+  }
+
+  // Update sessions to use categoryId instead of category
+  for (const session of sessions) {
+    if (session.category && !session.categoryId) {
+      session.categoryId = categoryMap[session.category] || session.category;
+      // Keep category for backwards compat, but it's now the ID
+    }
+  }
+
+  saveCategories(newCategories);
+  saveSessions(sessions);
+}
+
 let sessions = loadSessions();
 let categories = loadCategories();
+migrateCategories();
 
 // --- Elements -----------------------------------------------------------
 
@@ -103,10 +147,24 @@ function isSameDay(a, b) {
   );
 }
 
-function getCommonSubcategoriesForCategory(category) {
+function getCategoryLabel(categoryId) {
+  const cat = categories.find(c => c.id === categoryId);
+  return cat ? cat.label : categoryId;
+}
+
+function editCategoryLabel(categoryId, newLabel) {
+  const cat = categories.find(c => c.id === categoryId);
+  if (cat && newLabel.trim()) {
+    cat.label = newLabel.trim();
+    saveCategories(categories);
+    render();
+  }
+}
+
+function getCommonSubcategoriesForCategory(categoryId) {
   // Get the most recently used subcategories for this category
   const categorySessionsReversed = sessions
-    .filter((s) => s.category === category)
+    .filter((s) => s.categoryId === categoryId)
     .reverse();
 
   const subcategoryOrder = [];
@@ -137,18 +195,21 @@ function getAggregatedData(mode) {
   if (mode === "category") {
     const data = {};
     for (const session of todaySessions) {
-      const key = session.category;
+      const categoryId = session.categoryId || session.category;
+      const categoryLabel = getCategoryLabel(categoryId);
       const duration = (session.end ?? now) - session.start;
-      data[key] = (data[key] || 0) + duration;
+      data[categoryLabel] = (data[categoryLabel] || 0) + duration;
     }
     return Object.entries(data).map(([label, ms]) => ({ label, ms }));
   } else {
     // "subcategory" mode: group by category + subcategory
     const data = {};
     for (const session of todaySessions) {
+      const categoryId = session.categoryId || session.category;
+      const categoryLabel = getCategoryLabel(categoryId);
       const key = session.subcategory
-        ? `${session.category} • ${session.subcategory}`
-        : session.category;
+        ? `${categoryLabel} • ${session.subcategory}`
+        : categoryLabel;
       const duration = (session.end ?? now) - session.start;
       data[key] = (data[key] || 0) + duration;
     }
@@ -235,15 +296,15 @@ function renderPieChart() {
 
 // --- Modal Logic -------------------------------------------------------
 
-let pendingCategoryForModal = null;
+let pendingCategoryIdForModal = null;
 let selectedSubcategoryForModal = null;
 let isEditingRunningSession = false;
 
-function openSubcategoryModal(category) {
+function openSubcategoryModal(categoryId, categoryLabel) {
   const running = getRunningSession();
-  const isRunningCategory = running && running.category === category;
+  const isRunningCategory = running && running.categoryId === categoryId;
 
-  pendingCategoryForModal = category;
+  pendingCategoryIdForModal = categoryId;
   selectedSubcategoryForModal = isRunningCategory ? running.subcategory : null;
   detailInputEl.value = isRunningCategory ? running.detail : "";
   newSubcategoryInputEl.value = "";
@@ -252,7 +313,7 @@ function openSubcategoryModal(category) {
   // Update button text
   startSessionBtnEl.textContent = isEditingRunningSession ? "Update" : "Start";
 
-  modalCategoryTitleEl.textContent = category;
+  modalCategoryTitleEl.textContent = categoryLabel;
 
   // Show common subcategories
   const commonSubcategories = getCommonSubcategoriesForCategory(category);
@@ -294,7 +355,7 @@ function selectSubcategory(subcategory) {
 }
 
 function startSessionFromModal() {
-  if (!pendingCategoryForModal) {
+  if (!pendingCategoryIdForModal) {
     return;
   }
 
@@ -323,7 +384,8 @@ function startSessionFromModal() {
       id: crypto.randomUUID(),
       start: now,
       end: null,
-      category: pendingCategoryForModal,
+      categoryId: pendingCategoryIdForModal,
+      category: pendingCategoryIdForModal, // Keep for backwards compat
       subcategory: selectedSubcategoryForModal || "",
       detail: detail,
     });
@@ -342,14 +404,55 @@ function renderCategories() {
   const running = getRunningSession();
 
   for (const cat of categories) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "category-btn-wrapper";
+    wrapper.style.position = "relative";
+    wrapper.style.display = "inline-block";
+
     const btn = document.createElement("button");
     btn.className = "category-btn";
-    if (running && running.category === cat) {
+    if (running && running.categoryId === cat.id) {
       btn.classList.add("active");
     }
-    btn.textContent = cat;
-    btn.addEventListener("click", () => openSubcategoryModal(cat));
-    categoryButtonsEl.appendChild(btn);
+    btn.textContent = cat.label;
+    btn.addEventListener("click", () => openSubcategoryModal(cat.id, cat.label));
+    wrapper.appendChild(btn);
+
+    // Edit button
+    const editBtn = document.createElement("button");
+    editBtn.className = "category-edit-btn";
+    editBtn.textContent = "✏️";
+    editBtn.style.position = "absolute";
+    editBtn.style.top = "-8px";
+    editBtn.style.right = "-8px";
+    editBtn.style.width = "24px";
+    editBtn.style.height = "24px";
+    editBtn.style.padding = "0";
+    editBtn.style.fontSize = "12px";
+    editBtn.style.border = "1px solid var(--surface-2)";
+    editBtn.style.borderRadius = "50%";
+    editBtn.style.background = "var(--surface)";
+    editBtn.style.cursor = "pointer";
+    editBtn.style.display = "none";
+
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const newLabel = prompt("Edit category name:", cat.label);
+      if (newLabel) {
+        editCategoryLabel(cat.id, newLabel);
+      }
+    });
+
+    wrapper.addEventListener("mouseenter", () => {
+      editBtn.style.display = "block";
+    });
+
+    wrapper.addEventListener("mouseleave", () => {
+      editBtn.style.display = "none";
+    });
+
+    wrapper.appendChild(editBtn);
+    categoryButtonsEl.appendChild(wrapper);
   }
 }
 
@@ -358,8 +461,9 @@ function render() {
 
   // Update current category display
   if (running) {
+    const categoryLabel = getCategoryLabel(running.categoryId || running.category);
     const subtitle = running.subcategory ? ` / ${running.subcategory}` : "";
-    currentCategoryEl.textContent = running.category + subtitle;
+    currentCategoryEl.textContent = categoryLabel + subtitle;
   } else {
     currentCategoryEl.textContent = "—";
   }
@@ -397,8 +501,9 @@ function render() {
     meta.style.fontSize = "12px";
     meta.style.color = "var(--text-dim)";
     meta.style.flexBasis = "100%";
-    const metaText = [s.category, s.subcategory, s.detail].filter(Boolean).join(" • ");
-    meta.textContent = metaText || s.category;
+    const categoryLabel = getCategoryLabel(s.categoryId || s.category);
+    const metaText = [categoryLabel, s.subcategory, s.detail].filter(Boolean).join(" • ");
+    meta.textContent = metaText || categoryLabel;
 
     li.appendChild(meta);
     li.appendChild(range);
@@ -449,12 +554,15 @@ setInterval(tick, 1000);
 function addCategory() {
   const name = newCategoryInputEl.value.trim();
   if (!name) return;
-  if (categories.includes(name)) {
+  if (categories.some(c => c.label === name)) {
     newCategoryInputEl.value = "";
     return;
   }
 
-  categories.push(name);
+  categories.push({
+    id: crypto.randomUUID(),
+    label: name
+  });
   saveCategories(categories);
   newCategoryInputEl.value = "";
   render();

@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m 'Add subcategories with details and recently-used quick access *)"
+      "Bash(git commit -m 'Add subcategories with details and recently-used quick access *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'Add editable category labels with unique IDs *)"
     ]
   }
 }

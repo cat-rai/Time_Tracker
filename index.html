@@ -45,6 +45,50 @@
     </section>
   </div>
 
+  <!-- Subcategory selection modal -->
+  <div id="subcategory-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-category-title">Category</h2>
+        <button class="modal-close" id="modal-close-btn">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Common subcategories -->
+        <div class="common-subcategories">
+          <div class="section-label">Recently used</div>
+          <div id="common-subcategories-list" class="subcategory-buttons"></div>
+        </div>
+
+        <!-- New subcategory input -->
+        <form id="new-subcategory-form" class="new-subcategory-form">
+          <input
+            id="new-subcategory-input"
+            type="text"
+            placeholder="New subcategory..."
+            autocomplete="off"
+            maxlength="30"
+          />
+          <button type="submit" class="submit-btn">Create</button>
+        </form>
+
+        <!-- Detail/note field -->
+        <div class="detail-section">
+          <label for="detail-input">Details (optional)</label>
+          <input
+            id="detail-input"
+            type="text"
+            placeholder="What are you working on?"
+            maxlength="100"
+          />
+        </div>
+
+        <!-- Start button -->
+        <button id="start-session-btn" class="start-session-btn">Start</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m 'Add subcategories with details and recently-used quick access *)"
+    ]
+  }
+}

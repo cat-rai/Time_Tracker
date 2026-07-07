@@ -1,5 +1,5 @@
 // --- Data model -------------------------------------------------------
-// A "session" is { id, start: <ms>, end: <ms|null>, category: <string> }
+// A "session" is { id, start: <ms>, end: <ms|null>, category: <string>, subcategory: <string>, detail: <string> }
 // end === null means the session is currently running.
 
 const STORAGE_KEY = "time-tracker-sessions";
@@ -46,6 +46,16 @@ const emptyStateEl = document.getElementById("empty-state");
 const todayTotalEl = document.getElementById("today-total");
 const todayDateEl = document.getElementById("today-date");
 
+// Modal elements
+const modalEl = document.getElementById("subcategory-modal");
+const modalCategoryTitleEl = document.getElementById("modal-category-title");
+const commonSubcategoriesListEl = document.getElementById("common-subcategories-list");
+const newSubcategoryFormEl = document.getElementById("new-subcategory-form");
+const newSubcategoryInputEl = document.getElementById("new-subcategory-input");
+const detailInputEl = document.getElementById("detail-input");
+const startSessionBtnEl = document.getElementById("start-session-btn");
+const modalCloseBtnEl = document.getElementById("modal-close-btn");
+
 // --- Helpers --------------------------------------------------------------
 
 function getRunningSession() {
@@ -85,6 +95,104 @@ function isSameDay(a, b) {
   );
 }
 
+function getCommonSubcategoriesForCategory(category) {
+  // Get the most recently used subcategories for this category
+  const categorySessionsReversed = sessions
+    .filter((s) => s.category === category)
+    .reverse();
+
+  const subcategoryOrder = [];
+  const seen = new Set();
+
+  for (const session of categorySessionsReversed) {
+    if (session.subcategory && !seen.has(session.subcategory)) {
+      subcategoryOrder.push(session.subcategory);
+      seen.add(session.subcategory);
+      if (subcategoryOrder.length >= 3) break;
+    }
+  }
+
+  return subcategoryOrder;
+}
+
+// --- Modal Logic -------------------------------------------------------
+
+let pendingCategoryForModal = null;
+let selectedSubcategoryForModal = null;
+
+function openSubcategoryModal(category) {
+  pendingCategoryForModal = category;
+  selectedSubcategoryForModal = null;
+  detailInputEl.value = "";
+  newSubcategoryInputEl.value = "";
+
+  modalCategoryTitleEl.textContent = category;
+
+  // Show common subcategories
+  const commonSubcategories = getCommonSubcategoriesForCategory(category);
+  commonSubcategoriesListEl.innerHTML = "";
+
+  for (const subcategory of commonSubcategories) {
+    const btn = document.createElement("button");
+    btn.className = "subcategory-btn";
+    btn.type = "button";
+    btn.textContent = subcategory;
+    btn.addEventListener("click", () => selectSubcategory(subcategory));
+    commonSubcategoriesListEl.appendChild(btn);
+  }
+
+  modalEl.classList.remove("hidden");
+}
+
+function closeSubcategoryModal() {
+  modalEl.classList.add("hidden");
+  pendingCategoryForModal = null;
+  selectedSubcategoryForModal = null;
+}
+
+function selectSubcategory(subcategory) {
+  selectedSubcategoryForModal = subcategory;
+
+  // Update UI to show selection
+  const buttons = commonSubcategoriesListEl.querySelectorAll(".subcategory-btn");
+  buttons.forEach((btn) => {
+    if (btn.textContent === subcategory) {
+      btn.classList.add("selected");
+    } else {
+      btn.classList.remove("selected");
+    }
+  });
+}
+
+function startSessionFromModal() {
+  if (!pendingCategoryForModal || !selectedSubcategoryForModal) {
+    return;
+  }
+
+  const running = getRunningSession();
+  const now = Date.now();
+
+  // Stop any running session
+  if (running) {
+    running.end = now;
+  }
+
+  // Start new session
+  const detail = detailInputEl.value.trim();
+  sessions.push({
+    id: crypto.randomUUID(),
+    start: now,
+    end: null,
+    category: pendingCategoryForModal,
+    subcategory: selectedSubcategoryForModal,
+    detail: detail,
+  });
+
+  saveSessions(sessions);
+  closeSubcategoryModal();
+  render();
+}
+
 // --- Rendering --------------------------------------------------------
 
 function renderCategories() {
@@ -98,7 +206,7 @@ function renderCategories() {
       btn.classList.add("active");
     }
     btn.textContent = cat;
-    btn.addEventListener("click", () => toggleCategory(cat));
+    btn.addEventListener("click", () => openSubcategoryModal(cat));
     categoryButtonsEl.appendChild(btn);
   }
 }
@@ -108,7 +216,8 @@ function render() {
 
   // Update current category display
   if (running) {
-    currentCategoryEl.textContent = running.category;
+    const subtitle = running.subcategory ? ` / ${running.subcategory}` : "";
+    currentCategoryEl.textContent = running.category + subtitle;
   } else {
     currentCategoryEl.textContent = "—";
   }
@@ -145,7 +254,8 @@ function render() {
     meta.style.fontSize = "12px";
     meta.style.color = "var(--text-dim)";
     meta.style.flexBasis = "100%";
-    meta.textContent = s.category;
+    const metaText = [s.category, s.subcategory, s.detail].filter(Boolean).join(" • ");
+    meta.textContent = metaText || s.category;
 
     li.appendChild(meta);
     li.appendChild(range);
@@ -193,31 +303,6 @@ setInterval(tick, 1000);
 
 // --- Actions -------------------------------------------------------
 
-function toggleCategory(categoryName) {
-  const running = getRunningSession();
-  const now = Date.now();
-
-  // If this category is already running, stop it
-  if (running && running.category === categoryName) {
-    running.end = now;
-  } else {
-    // Stop any running session
-    if (running) {
-      running.end = now;
-    }
-    // Start new session with this category
-    sessions.push({
-      id: crypto.randomUUID(),
-      start: now,
-      end: null,
-      category: categoryName,
-    });
-  }
-
-  saveSessions(sessions);
-  render();
-}
-
 function addCategory() {
   const name = newCategoryInputEl.value.trim();
   if (!name) return;
@@ -235,6 +320,24 @@ function addCategory() {
 addCategoryFormEl.addEventListener("submit", (e) => {
   e.preventDefault();
   addCategory();
+});
+
+// Modal actions
+newSubcategoryFormEl.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = newSubcategoryInputEl.value.trim();
+  if (!name) return;
+  selectSubcategory(name);
+});
+
+startSessionBtnEl.addEventListener("click", startSessionFromModal);
+modalCloseBtnEl.addEventListener("click", closeSubcategoryModal);
+
+// Close modal on backdrop click
+modalEl.addEventListener("click", (e) => {
+  if (e.target === modalEl) {
+    closeSubcategoryModal();
+  }
 });
 
 // --- Header date ----------------------------------------------------------

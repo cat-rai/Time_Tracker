@@ -1,10 +1,9 @@
 // --- Data model -------------------------------------------------------
-// A "session" is { id, start: <ms epoch>, end: <ms epoch|null> }
+// A "session" is { id, start: <ms>, end: <ms|null>, category: <string> }
 // end === null means the session is currently running.
-// Kept intentionally flat/simple in v1 so category/subcategory fields
-// can be added to each session object later without a migration.
 
 const STORAGE_KEY = "time-tracker-sessions";
+const CATEGORIES_KEY = "time-tracker-categories";
 
 function loadSessions() {
   try {
@@ -19,13 +18,29 @@ function saveSessions(sessions) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
 }
 
+function loadCategories() {
+  try {
+    const raw = localStorage.getItem(CATEGORIES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCategories(categories) {
+  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+}
+
 let sessions = loadSessions();
+let categories = loadCategories();
 
 // --- Elements -----------------------------------------------------------
 
-const trackBtn = document.getElementById("track-btn");
-const trackBtnLabel = document.getElementById("track-btn-label");
+const categoryButtonsEl = document.getElementById("category-buttons");
+const addCategoryFormEl = document.getElementById("add-category-form");
+const newCategoryInputEl = document.getElementById("new-category-input");
 const liveTimerEl = document.getElementById("live-timer");
+const currentCategoryEl = document.getElementById("current-category");
 const sessionListEl = document.getElementById("session-list");
 const emptyStateEl = document.getElementById("empty-state");
 const todayTotalEl = document.getElementById("today-total");
@@ -72,20 +87,33 @@ function isSameDay(a, b) {
 
 // --- Rendering --------------------------------------------------------
 
+function renderCategories() {
+  categoryButtonsEl.innerHTML = "";
+  const running = getRunningSession();
+
+  for (const cat of categories) {
+    const btn = document.createElement("button");
+    btn.className = "category-btn";
+    if (running && running.category === cat) {
+      btn.classList.add("active");
+    }
+    btn.textContent = cat;
+    btn.addEventListener("click", () => toggleCategory(cat));
+    categoryButtonsEl.appendChild(btn);
+  }
+}
+
 function render() {
   const running = getRunningSession();
 
-  // Button state
+  // Update current category display
   if (running) {
-    trackBtn.classList.remove("idle");
-    trackBtn.classList.add("running");
-    trackBtnLabel.textContent = "Stop";
+    currentCategoryEl.textContent = running.category;
   } else {
-    trackBtn.classList.remove("running");
-    trackBtn.classList.add("idle");
-    trackBtnLabel.textContent = "Start";
-    liveTimerEl.textContent = "00:00:00";
+    currentCategoryEl.textContent = "—";
   }
+
+  renderCategories();
 
   // Today's sessions, newest first
   const now = Date.now();
@@ -113,12 +141,19 @@ function render() {
     duration.dataset.running = s.end === null ? "1" : "0";
     duration.textContent = formatDuration((s.end ?? now) - s.start);
 
+    const meta = document.createElement("span");
+    meta.style.fontSize = "12px";
+    meta.style.color = "var(--text-dim)";
+    meta.style.flexBasis = "100%";
+    meta.textContent = s.category;
+
+    li.appendChild(meta);
     li.appendChild(range);
     li.appendChild(duration);
     sessionListEl.appendChild(li);
   }
 
-  // Today's total (includes live running time)
+  // Today's total
   const totalMs = todaySessions.reduce(
     (sum, s) => sum + ((s.end ?? now) - s.start),
     0
@@ -126,50 +161,81 @@ function render() {
   todayTotalEl.textContent = formatDuration(totalMs);
 }
 
-// --- Ticking (updates live timer + running duration every second) -----
+// --- Ticking --------------------------------------------------------
 
 function tick() {
   const running = getRunningSession();
+  const now = Date.now();
+
   if (running) {
-    liveTimerEl.textContent = formatClock(Date.now() - running.start);
-  }
-  // Keep the "now" duration on the running list item fresh too.
-  const runningDurationEl = sessionListEl.querySelector(
-    '.duration[data-running="1"]'
-  );
-  if (runningDurationEl) {
-    const start = Number(runningDurationEl.dataset.start);
-    runningDurationEl.textContent = formatDuration(Date.now() - start);
-  }
-  const totalEl = todayTotalEl;
-  if (running) {
-    const now = Date.now();
+    liveTimerEl.textContent = formatClock(now - running.start);
+
+    // Keep the "now" duration on the running list item fresh too.
+    const runningDurationEl = sessionListEl.querySelector(
+      '.duration[data-running="1"]'
+    );
+    if (runningDurationEl) {
+      const start = Number(runningDurationEl.dataset.start);
+      runningDurationEl.textContent = formatDuration(now - start);
+    }
+
+    // Update today's total
     const totalMs = sessions
       .filter((s) => isSameDay(s.start, now))
       .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0);
-    totalEl.textContent = formatDuration(totalMs);
+    todayTotalEl.textContent = formatDuration(totalMs);
+  } else {
+    liveTimerEl.textContent = "00:00:00";
   }
 }
 
 setInterval(tick, 1000);
 
-// --- Actions ------------------------------------------------------------
+// --- Actions -------------------------------------------------------
 
-function toggleTracking() {
+function toggleCategory(categoryName) {
   const running = getRunningSession();
   const now = Date.now();
 
-  if (running) {
+  // If this category is already running, stop it
+  if (running && running.category === categoryName) {
     running.end = now;
   } else {
-    sessions.push({ id: crypto.randomUUID(), start: now, end: null });
+    // Stop any running session
+    if (running) {
+      running.end = now;
+    }
+    // Start new session with this category
+    sessions.push({
+      id: crypto.randomUUID(),
+      start: now,
+      end: null,
+      category: categoryName,
+    });
   }
 
   saveSessions(sessions);
   render();
 }
 
-trackBtn.addEventListener("click", toggleTracking);
+function addCategory() {
+  const name = newCategoryInputEl.value.trim();
+  if (!name) return;
+  if (categories.includes(name)) {
+    newCategoryInputEl.value = "";
+    return;
+  }
+
+  categories.push(name);
+  saveCategories(categories);
+  newCategoryInputEl.value = "";
+  render();
+}
+
+addCategoryFormEl.addEventListener("submit", (e) => {
+  e.preventDefault();
+  addCategory();
+});
 
 // --- Header date ----------------------------------------------------------
 

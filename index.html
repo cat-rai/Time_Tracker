@@ -15,10 +15,24 @@
     </header>
 
     <main class="tracker">
-      <button id="track-btn" class="track-btn idle">
-        <span id="track-btn-label">Start</span>
-        <span id="live-timer" class="live-timer">00:00:00</span>
-      </button>
+      <div class="timer-display">
+        <div id="current-category" class="current-category">—</div>
+        <div id="live-timer" class="live-timer">00:00:00</div>
+      </div>
+
+      <div class="categories-section">
+        <div class="category-buttons" id="category-buttons"></div>
+        <form id="add-category-form" class="add-category-form">
+          <input
+            id="new-category-input"
+            type="text"
+            placeholder="Add category..."
+            autocomplete="off"
+            maxlength="30"
+          />
+          <button type="submit" class="add-btn">+</button>
+        </form>
+      </div>
     </main>
 
     <section class="log">

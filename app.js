@@ -119,12 +119,20 @@ function getCommonSubcategoriesForCategory(category) {
 
 let pendingCategoryForModal = null;
 let selectedSubcategoryForModal = null;
+let isEditingRunningSession = false;
 
 function openSubcategoryModal(category) {
+  const running = getRunningSession();
+  const isRunningCategory = running && running.category === category;
+
   pendingCategoryForModal = category;
-  selectedSubcategoryForModal = null;
-  detailInputEl.value = "";
+  selectedSubcategoryForModal = isRunningCategory ? running.subcategory : null;
+  detailInputEl.value = isRunningCategory ? running.detail : "";
   newSubcategoryInputEl.value = "";
+  isEditingRunningSession = isRunningCategory;
+
+  // Update button text
+  startSessionBtnEl.textContent = isEditingRunningSession ? "Update" : "Start";
 
   modalCategoryTitleEl.textContent = category;
 
@@ -137,6 +145,9 @@ function openSubcategoryModal(category) {
     btn.className = "subcategory-btn";
     btn.type = "button";
     btn.textContent = subcategory;
+    if (isRunningCategory && subcategory === running.subcategory) {
+      btn.classList.add("selected");
+    }
     btn.addEventListener("click", () => selectSubcategory(subcategory));
     commonSubcategoriesListEl.appendChild(btn);
   }
@@ -169,26 +180,39 @@ function startSessionFromModal() {
     return;
   }
 
-  const running = getRunningSession();
-  const now = Date.now();
+  const detail = detailInputEl.value.trim();
 
-  // Stop any running session
-  if (running) {
-    running.end = now;
+  if (isEditingRunningSession) {
+    // Update the running session
+    const running = getRunningSession();
+    if (running) {
+      running.subcategory = selectedSubcategoryForModal;
+      running.detail = detail;
+      saveSessions(sessions);
+    }
+  } else {
+    // Create new session
+    const running = getRunningSession();
+    const now = Date.now();
+
+    // Stop any running session
+    if (running) {
+      running.end = now;
+    }
+
+    // Start new session
+    sessions.push({
+      id: crypto.randomUUID(),
+      start: now,
+      end: null,
+      category: pendingCategoryForModal,
+      subcategory: selectedSubcategoryForModal,
+      detail: detail,
+    });
+
+    saveSessions(sessions);
   }
 
-  // Start new session
-  const detail = detailInputEl.value.trim();
-  sessions.push({
-    id: crypto.randomUUID(),
-    start: now,
-    end: null,
-    category: pendingCategoryForModal,
-    subcategory: selectedSubcategoryForModal,
-    detail: detail,
-  });
-
-  saveSessions(sessions);
   closeSubcategoryModal();
   render();
 }

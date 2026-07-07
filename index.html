@@ -65,6 +65,31 @@
     </section>
   </div>
 
+  <!-- Edit category modal -->
+  <div id="edit-category-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Edit Category</h2>
+        <button class="modal-close" id="edit-modal-close-btn">×</button>
+      </div>
+      <div class="modal-body">
+        <label for="edit-category-input" style="display: block; margin-bottom: 12px; font-weight: 600;">Category name:</label>
+        <input
+          id="edit-category-input"
+          type="text"
+          placeholder="Enter category name"
+          autocomplete="off"
+          maxlength="30"
+          style="width: 100%; padding: 10px 12px; border: 1px solid var(--surface-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 14px; font-family: inherit; margin-bottom: 16px;"
+        />
+        <div style="display: flex; gap: 8px;">
+          <button id="edit-category-save" class="start-session-btn" style="flex: 1;">Save</button>
+          <button id="edit-category-cancel" class="modal-close" style="flex: 1; background: var(--surface-2); color: var(--text);">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Subcategory selection modal -->
   <div id="subcategory-modal" class="modal hidden">
     <div class="modal-content">

@@ -111,6 +111,14 @@ const detailInputEl = document.getElementById("detail-input");
 const startSessionBtnEl = document.getElementById("start-session-btn");
 const modalCloseBtnEl = document.getElementById("modal-close-btn");
 
+// Edit category modal elements
+const editModalEl = document.getElementById("edit-category-modal");
+const editCategoryInputEl = document.getElementById("edit-category-input");
+const editCategorySaveBtn = document.getElementById("edit-category-save");
+const editCategoryCancelBtn = document.getElementById("edit-category-cancel");
+const editModalCloseBtnEl = document.getElementById("edit-modal-close-btn");
+let editingCategoryId = null;
+
 // --- Helpers --------------------------------------------------------------
 
 function getRunningSession() {
@@ -520,19 +528,22 @@ function renderCategories() {
     categoryButtonsEl.appendChild(wrapper);
   }
 
-  // Add click handler to all edit buttons
-  document.querySelectorAll(".category-edit-btn").forEach(btn => {
-    btn.addEventListener("click", function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      const categoryId = this.dataset.categoryId;
-      const currentLabel = this.dataset.categoryLabel;
-      const newLabel = prompt("Edit category name:", currentLabel);
-      if (newLabel && newLabel.trim()) {
-        editCategoryLabel(categoryId, newLabel);
-      }
-    });
-  });
+}
+
+function closeEditModal() {
+  editModalEl.classList.add("hidden");
+  editingCategoryId = null;
+  editCategoryInputEl.value = "";
+}
+
+function saveEditCategory() {
+  if (editingCategoryId) {
+    const newLabel = editCategoryInputEl.value.trim();
+    if (newLabel) {
+      editCategoryLabel(editingCategoryId, newLabel);
+    }
+  }
+  closeEditModal();
 }
 
 function render() {
@@ -667,6 +678,40 @@ modalCloseBtnEl.addEventListener("click", closeSubcategoryModal);
 modalEl.addEventListener("click", (e) => {
   if (e.target === modalEl) {
     closeSubcategoryModal();
+  }
+});
+
+// Edit category modal actions
+editCategorySaveBtn.addEventListener("click", saveEditCategory);
+editCategoryCancelBtn.addEventListener("click", closeEditModal);
+editModalCloseBtnEl.addEventListener("click", closeEditModal);
+
+// Close edit modal on backdrop click
+editModalEl.addEventListener("click", (e) => {
+  if (e.target === editModalEl) {
+    closeEditModal();
+  }
+});
+
+// Enter key saves in edit modal
+editCategoryInputEl.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") {
+    saveEditCategory();
+  }
+});
+
+// Edit button click handler using event delegation
+categoryButtonsEl.addEventListener("click", (e) => {
+  const editBtn = e.target.closest(".category-edit-btn");
+  if (editBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    editingCategoryId = editBtn.dataset.categoryId;
+    const currentLabel = editBtn.dataset.categoryLabel;
+    editCategoryInputEl.value = currentLabel;
+    editModalEl.classList.remove("hidden");
+    editCategoryInputEl.focus();
+    editCategoryInputEl.select();
   }
 });
 

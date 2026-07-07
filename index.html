@@ -22,16 +22,21 @@
 
       <div class="categories-section">
         <div class="category-buttons" id="category-buttons"></div>
-        <form id="add-category-form" class="add-category-form">
-          <input
-            id="new-category-input"
-            type="text"
-            placeholder="Add category..."
-            autocomplete="off"
-            maxlength="30"
-          />
-          <button type="submit" class="add-btn">+</button>
-        </form>
+        <button id="toggle-more-categories" class="toggle-more-btn">More</button>
+
+        <div id="more-categories-section" class="more-categories-section hidden">
+          <div class="category-buttons" id="more-category-buttons"></div>
+          <form id="add-category-form" class="add-category-form">
+            <input
+              id="new-category-input"
+              type="text"
+              placeholder="Add category..."
+              autocomplete="off"
+              maxlength="30"
+            />
+            <button type="submit" class="add-btn">+</button>
+          </form>
+        </div>
       </div>
     </main>
 

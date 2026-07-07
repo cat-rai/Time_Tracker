@@ -175,6 +175,54 @@ html, body {
   color: var(--accent);
 }
 
+.toggle-more-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--surface-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.toggle-more-btn:active {
+  transform: scale(0.98);
+}
+
+.toggle-more-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.more-categories-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--surface-2);
+  margin-top: 12px;
+  animation: slideDown 0.3s ease;
+}
+
+.more-categories-section.hidden {
+  display: none;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
 .log {
   flex: 1;
   background: var(--surface);

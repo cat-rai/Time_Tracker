@@ -81,6 +81,9 @@ migrateCategories();
 // --- Elements -----------------------------------------------------------
 
 const categoryButtonsEl = document.getElementById("category-buttons");
+const moreCategoryButtonsEl = document.getElementById("more-category-buttons");
+const toggleMoreCategoriesBtn = document.getElementById("toggle-more-categories");
+const moreCategoriesSectionEl = document.getElementById("more-categories-section");
 const addCategoryFormEl = document.getElementById("add-category-form");
 const newCategoryInputEl = document.getElementById("new-category-input");
 const liveTimerEl = document.getElementById("live-timer");
@@ -170,6 +173,26 @@ function editCategoryLabel(categoryId, newLabel) {
     saveCategories(categories);
     render();
   }
+}
+
+function getCategoriesSortedByRecency() {
+  // Sort categories by most recent session (returns a new sorted array)
+  const categoryLastUsed = {};
+
+  // Find the most recent session for each category
+  for (const session of sessions) {
+    const catId = session.categoryId || session.category;
+    if (!categoryLastUsed[catId] || session.start > categoryLastUsed[catId]) {
+      categoryLastUsed[catId] = session.start;
+    }
+  }
+
+  // Create a copy and sort by last usage time
+  return [...categories].sort((a, b) => {
+    const aTime = categoryLastUsed[a.id] || 0;
+    const bTime = categoryLastUsed[b.id] || 0;
+    return bTime - aTime;
+  });
 }
 
 function getCommonSubcategoriesForCategory(categoryId) {
@@ -458,11 +481,11 @@ function startSessionFromModal() {
 
 // --- Rendering --------------------------------------------------------
 
-function renderCategories() {
-  categoryButtonsEl.innerHTML = "";
+function renderCategoryButtons(containerEl, categoriesToRender) {
+  containerEl.innerHTML = "";
   const running = getRunningSession();
 
-  for (const cat of categories) {
+  for (const cat of categoriesToRender) {
     const wrapper = document.createElement("div");
     wrapper.className = "category-btn-wrapper";
     wrapper.style.position = "relative";
@@ -539,9 +562,27 @@ function renderCategories() {
     });
 
     wrapper.appendChild(editBtn);
-    categoryButtonsEl.appendChild(wrapper);
+    containerEl.appendChild(wrapper);
+  }
+}
+
+function renderCategories() {
+  const sorted = getCategoriesSortedByRecency();
+  const recentCategories = sorted.slice(0, 4);
+  const olderCategories = sorted.slice(4);
+
+  // Render recent categories in main section
+  renderCategoryButtons(categoryButtonsEl, recentCategories);
+
+  // Show/hide "More" button
+  if (olderCategories.length > 0) {
+    toggleMoreCategoriesBtn.style.display = "block";
+  } else {
+    toggleMoreCategoriesBtn.style.display = "none";
   }
 
+  // Render older categories in expanded section
+  renderCategoryButtons(moreCategoryButtonsEl, olderCategories);
 }
 
 function closeEditModal() {
@@ -714,19 +755,27 @@ editCategoryInputEl.addEventListener("keypress", (e) => {
   }
 });
 
-// Edit button click handler using event delegation
-categoryButtonsEl.addEventListener("click", (e) => {
-  const editBtn = e.target.closest(".category-edit-btn");
-  if (editBtn) {
-    e.preventDefault();
-    e.stopPropagation();
-    editingCategoryId = editBtn.dataset.categoryId;
-    const currentLabel = editBtn.dataset.categoryLabel;
-    editCategoryInputEl.value = currentLabel;
-    editModalEl.classList.remove("hidden");
-    editCategoryInputEl.focus();
-    editCategoryInputEl.select();
-  }
+// Edit button click handler using event delegation for both sections
+[categoryButtonsEl, moreCategoryButtonsEl].forEach(container => {
+  container.addEventListener("click", (e) => {
+    const editBtn = e.target.closest(".category-edit-btn");
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      editingCategoryId = editBtn.dataset.categoryId;
+      const currentLabel = editBtn.dataset.categoryLabel;
+      editCategoryInputEl.value = currentLabel;
+      editModalEl.classList.remove("hidden");
+      editCategoryInputEl.focus();
+      editCategoryInputEl.select();
+    }
+  });
+});
+
+// Toggle more categories section
+toggleMoreCategoriesBtn.addEventListener("click", () => {
+  moreCategoriesSectionEl.classList.toggle("hidden");
+  toggleMoreCategoriesBtn.textContent = moreCategoriesSectionEl.classList.contains("hidden") ? "More" : "Less";
 });
 
 function renderChart() {

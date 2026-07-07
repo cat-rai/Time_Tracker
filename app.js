@@ -408,6 +408,7 @@ function renderCategories() {
     wrapper.className = "category-btn-wrapper";
     wrapper.style.position = "relative";
     wrapper.style.display = "inline-block";
+    wrapper.style.marginRight = "8px";
 
     const btn = document.createElement("button");
     btn.className = "category-btn";
@@ -418,30 +419,32 @@ function renderCategories() {
     btn.addEventListener("click", () => openSubcategoryModal(cat.id, cat.label));
     wrapper.appendChild(btn);
 
-    // Edit button
+    // Edit button - create as a proper button with click handler
     const editBtn = document.createElement("button");
+    editBtn.type = "button";
     editBtn.className = "category-edit-btn";
-    editBtn.textContent = "✏️";
+    editBtn.textContent = "✎";
+    editBtn.title = "Edit category name";
     editBtn.style.position = "absolute";
-    editBtn.style.top = "-8px";
-    editBtn.style.right = "-8px";
-    editBtn.style.width = "24px";
-    editBtn.style.height = "24px";
-    editBtn.style.padding = "0";
-    editBtn.style.fontSize = "12px";
-    editBtn.style.border = "1px solid var(--surface-2)";
-    editBtn.style.borderRadius = "50%";
+    editBtn.style.top = "2px";
+    editBtn.style.right = "2px";
+    editBtn.style.width = "20px";
+    editBtn.style.height = "20px";
+    editBtn.style.minWidth = "20px";
+    editBtn.style.padding = "2px";
+    editBtn.style.fontSize = "11px";
+    editBtn.style.border = "1px solid var(--accent)";
+    editBtn.style.borderRadius = "3px";
     editBtn.style.background = "var(--surface)";
+    editBtn.style.color = "var(--text)";
     editBtn.style.cursor = "pointer";
     editBtn.style.display = "none";
+    editBtn.style.opacity = "0.7";
+    editBtn.style.zIndex = "10";
 
-    editBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const newLabel = prompt("Edit category name:", cat.label);
-      if (newLabel) {
-        editCategoryLabel(cat.id, newLabel);
-      }
-    });
+    // Store category info on the button for easy access
+    editBtn.dataset.categoryId = cat.id;
+    editBtn.dataset.categoryLabel = cat.label;
 
     wrapper.addEventListener("mouseenter", () => {
       editBtn.style.display = "block";
@@ -454,6 +457,20 @@ function renderCategories() {
     wrapper.appendChild(editBtn);
     categoryButtonsEl.appendChild(wrapper);
   }
+
+  // Add click handler to all edit buttons
+  document.querySelectorAll(".category-edit-btn").forEach(btn => {
+    btn.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const categoryId = this.dataset.categoryId;
+      const currentLabel = this.dataset.categoryLabel;
+      const newLabel = prompt("Edit category name:", currentLabel);
+      if (newLabel && newLabel.trim()) {
+        editCategoryLabel(categoryId, newLabel);
+      }
+    });
+  });
 }
 
 function render() {

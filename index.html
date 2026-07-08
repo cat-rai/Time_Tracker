@@ -44,9 +44,12 @@
     </section>
 
     <section class="chart-section" id="activities-chart-section">
-      <div class="chart-header">
+      <div class="chart-header collapsible-header">
         <h2>Activities</h2>
-        <div style="display: flex; gap: 8px;">
+        <span class="collapse-arrow">›</span>
+      </div>
+      <div class="collapsible-content hidden">
+        <div class="chart-controls">
           <div class="chart-toggle">
             <button class="toggle-btn active" data-chart-type="pie">Pie</button>
             <button class="toggle-btn" data-chart-type="bar">Bar</button>
@@ -56,21 +59,26 @@
             <button class="toggle-btn" data-view-mode="subcategory">By Subcategory</button>
           </div>
         </div>
-      </div>
-      <select class="subcategory-picker hidden"></select>
-      <div class="chart-container">
-        <svg viewBox="0 0 400 400"></svg>
-        <div class="chart-legend"></div>
+        <select class="subcategory-picker hidden"></select>
+        <div class="chart-container">
+          <svg viewBox="0 0 400 400"></svg>
+          <div class="chart-legend"></div>
+        </div>
       </div>
     </section>
 
     <section class="log" id="activities-log-section">
-      <div class="log-header">
-        <h2>Activity Log</h2>
-        <div class="log-total">0h 0m</div>
+      <div class="log-header collapsible-header">
+        <h2>Activities Log</h2>
+        <div class="log-header-right">
+          <div class="log-total">0h 0m</div>
+          <span class="collapse-arrow">›</span>
+        </div>
       </div>
-      <ul class="session-list"></ul>
-      <p class="empty-state">No sessions yet. Hit Start.</p>
+      <div class="collapsible-content hidden">
+        <ul class="session-list"></ul>
+        <p class="empty-state">No sessions yet. Hit Start.</p>
+      </div>
     </section>
 
     <!-- States group -->
@@ -98,9 +106,12 @@
     </section>
 
     <section class="chart-section" id="states-chart-section">
-      <div class="chart-header">
+      <div class="chart-header collapsible-header">
         <h2>States</h2>
-        <div style="display: flex; gap: 8px;">
+        <span class="collapse-arrow">›</span>
+      </div>
+      <div class="collapsible-content hidden">
+        <div class="chart-controls">
           <div class="chart-toggle">
             <button class="toggle-btn active" data-chart-type="pie">Pie</button>
             <button class="toggle-btn" data-chart-type="bar">Bar</button>
@@ -110,21 +121,26 @@
             <button class="toggle-btn" data-view-mode="subcategory">By Subcategory</button>
           </div>
         </div>
-      </div>
-      <select class="subcategory-picker hidden"></select>
-      <div class="chart-container">
-        <svg viewBox="0 0 400 400"></svg>
-        <div class="chart-legend"></div>
+        <select class="subcategory-picker hidden"></select>
+        <div class="chart-container">
+          <svg viewBox="0 0 400 400"></svg>
+          <div class="chart-legend"></div>
+        </div>
       </div>
     </section>
 
     <section class="log" id="states-log-section">
-      <div class="log-header">
-        <h2>State Log</h2>
-        <div class="log-total">0h 0m</div>
+      <div class="log-header collapsible-header">
+        <h2>States Log</h2>
+        <div class="log-header-right">
+          <div class="log-total">0h 0m</div>
+          <span class="collapse-arrow">›</span>
+        </div>
       </div>
-      <ul class="session-list"></ul>
-      <p class="empty-state">No sessions yet. Hit Start.</p>
+      <div class="collapsible-content hidden">
+        <ul class="session-list"></ul>
+        <p class="empty-state">No sessions yet. Hit Start.</p>
+      </div>
     </section>
   </div>
 

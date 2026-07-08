@@ -258,7 +258,6 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
 }
 
 .log-header h2 {
@@ -270,10 +269,33 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+.log-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .log-total {
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
+}
+
+.collapsible-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapse-arrow {
+  display: inline-block;
+  color: var(--text-dim);
+  font-size: 16px;
+  font-weight: 700;
+  transition: transform 0.2s ease;
+}
+
+.collapsible-content {
+  margin-top: 16px;
 }
 
 .session-list {
@@ -418,8 +440,6 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -430,6 +450,13 @@ html, body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .chart-toggle {

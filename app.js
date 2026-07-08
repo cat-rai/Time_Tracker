@@ -185,10 +185,14 @@ function buildGroupConfig(key, sectionId, chartSectionId, logSectionId) {
     svgEl: chartSectionEl.querySelector("svg"),
     legendEl: chartSectionEl.querySelector(".chart-legend"),
     pickerEl: chartSectionEl.querySelector(".subcategory-picker"),
+    chartHeaderEl: chartSectionEl.querySelector(".collapsible-header"),
+    chartContentEl: chartSectionEl.querySelector(".collapsible-content"),
     logSectionEl,
     listEl: logSectionEl.querySelector(".session-list"),
     totalEl: logSectionEl.querySelector(".log-total"),
     emptyEl: logSectionEl.querySelector(".empty-state"),
+    logHeaderEl: logSectionEl.querySelector(".collapsible-header"),
+    logContentEl: logSectionEl.querySelector(".collapsible-content"),
     chartType: "pie",
     chartViewMode: "category",
     selectedCategoryId: null,
@@ -881,8 +885,21 @@ setInterval(tick, 1000);
 
 // --- Wiring -------------------------------------------------------
 
+function setupCollapsible(headerEl, contentEl) {
+  const arrowEl = headerEl.querySelector(".collapse-arrow");
+  let expanded = false; // always start collapsed
+  headerEl.addEventListener("click", () => {
+    expanded = !expanded;
+    contentEl.classList.toggle("hidden", !expanded);
+    arrowEl.style.transform = expanded ? "rotate(90deg)" : "rotate(0deg)";
+  });
+}
+
 for (const group of ["activity", "state"]) {
   const g = GROUPS[group];
+
+  setupCollapsible(g.chartHeaderEl, g.chartContentEl);
+  setupCollapsible(g.logHeaderEl, g.logContentEl);
 
   g.addFormEl.addEventListener("submit", (e) => {
     e.preventDefault();

@@ -1,6 +1,8 @@
 // --- Data model -------------------------------------------------------
-// A "session" is { id, start: <ms>, end: <ms|null>, category: <string>, subcategory: <string>, detail: <string> }
+// A "session" is { id, start: <ms>, end: <ms|null>, categoryId, group: "activity"|"state", subcategory, detail }
 // end === null means the session is currently running.
+// Activities are mutually exclusive (starting one stops any other running activity).
+// States are independent — any number can run concurrently, and never affect Activities.
 
 const STORAGE_KEY = "time-tracker-sessions";
 const CATEGORIES_KEY = "time-tracker-categories";
@@ -8,7 +10,8 @@ const CATEGORIES_KEY = "time-tracker-categories";
 // Validated categorical palette (see dataviz skill's validate_palette.js):
 // passes lightness/chroma/CVD/contrast checks against this app's actual
 // dark (#181b21) and light (#f5f6f8) surfaces. Slots are assigned in a
-// fixed order per category (never re-cycled by render position).
+// fixed order per category (never re-cycled by render position), scoped
+// independently per group so Activities and States each use the full set.
 const CATEGORY_COLORS_DARK = [
   "#3987e5", "#199e70", "#c98500", "#008300",
   "#9085e9", "#e66767", "#d55181", "#d95926",
@@ -42,7 +45,9 @@ function shadeColor(hex, percent) {
 function loadSessions() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const data = raw ? JSON.parse(raw) : [];
+    // Backfill group on historical sessions (all pre-existing data is Activities)
+    return data.map((s) => (s.group ? s : { ...s, group: "activity" }));
   } catch {
     return [];
   }
@@ -56,12 +61,15 @@ function loadCategories() {
   try {
     const raw = localStorage.getItem(CATEGORIES_KEY);
     const data = raw ? JSON.parse(raw) : [];
-    // Ensure all categories have id, label, and a fixed color slot
-    return data.map((cat, i) => {
+    const perGroupCount = { activity: 0, state: 0 };
+    // Ensure all categories have id, label, group, and a fixed color slot
+    return data.map((cat) => {
       const normalized = typeof cat === "string" ? { id: cat, label: cat } : cat;
+      if (!normalized.group) normalized.group = "activity";
       if (typeof normalized.colorSlot !== "number") {
-        normalized.colorSlot = i % CATEGORY_PALETTE_SIZE;
+        normalized.colorSlot = perGroupCount[normalized.group] % CATEGORY_PALETTE_SIZE;
       }
+      perGroupCount[normalized.group] = (perGroupCount[normalized.group] || 0) + 1;
       return normalized;
     });
   } catch {
@@ -92,12 +100,20 @@ function migrateCategories() {
 
   // Convert to objects with IDs
   for (const categoryStr of uniqueCategories) {
-    const catObj = oldCategories.find(c => (c.label || c) === categoryStr) ||
-                   { id: categoryStr, label: categoryStr };
+    const catObj = oldCategories.find(c => c.id === categoryStr || (c.label || c) === categoryStr) ||
+                   { id: categoryStr, label: categoryStr, group: "activity" };
     if (!catObj.id) catObj.id = categoryStr;
     if (!catObj.label) catObj.label = categoryStr;
+    if (!catObj.group) catObj.group = "activity";
     newCategories.push(catObj);
     categoryMap[categoryStr] = catObj.id;
+  }
+
+  // Merge in any categories that already exist as objects but had no legacy sessions
+  for (const cat of oldCategories) {
+    if (!newCategories.some((c) => c.id === cat.id)) {
+      newCategories.push(cat);
+    }
   }
 
   // Update sessions to use categoryId instead of category
@@ -118,40 +134,9 @@ migrateCategories();
 
 // --- Elements -----------------------------------------------------------
 
-const categoryButtonsEl = document.getElementById("category-buttons");
-const moreCategoryButtonsEl = document.getElementById("more-category-buttons");
-const toggleMoreCategoriesBtn = document.getElementById("toggle-more-categories");
-const moreCategoriesSectionEl = document.getElementById("more-categories-section");
-const addCategoryFormEl = document.getElementById("add-category-form");
-const newCategoryInputEl = document.getElementById("new-category-input");
 const liveTimerEl = document.getElementById("live-timer");
 const currentCategoryEl = document.getElementById("current-category");
-const sessionListEl = document.getElementById("session-list");
-const emptyStateEl = document.getElementById("empty-state");
-const todayTotalEl = document.getElementById("today-total");
 const todayDateEl = document.getElementById("today-date");
-const resetAllBtnEl = document.getElementById("reset-all-btn");
-
-// Chart elements
-const chartSvgEl = document.getElementById("pie-chart");
-const chartLegendEl = document.getElementById("chart-legend");
-const toggleByCategoryEl = document.getElementById("toggle-by-category");
-const toggleBySubcategoryEl = document.getElementById("toggle-by-subcategory");
-const togglePieChartEl = document.getElementById("toggle-pie-chart");
-const toggleBarChartEl = document.getElementById("toggle-bar-chart");
-
-let chartViewMode = "category"; // "category" or "subcategory"
-let chartType = "pie"; // "pie" or "bar"
-
-// Modal elements
-const modalEl = document.getElementById("subcategory-modal");
-const modalCategoryTitleEl = document.getElementById("modal-category-title");
-const commonSubcategoriesListEl = document.getElementById("common-subcategories-list");
-const newSubcategoryFormEl = document.getElementById("new-subcategory-form");
-const newSubcategoryInputEl = document.getElementById("new-subcategory-input");
-const detailInputEl = document.getElementById("detail-input");
-const startSessionBtnEl = document.getElementById("start-session-btn");
-const modalCloseBtnEl = document.getElementById("modal-close-btn");
 
 // Edit category modal elements
 const editModalEl = document.getElementById("edit-category-modal");
@@ -175,10 +160,50 @@ const editSessionCancelBtn = document.getElementById("edit-session-cancel");
 const editSessionCloseBtnEl = document.getElementById("edit-session-close-btn");
 let editingSessionId = null;
 
+// --- Group registry -------------------------------------------------------
+// Each group (Activities / States) owns its own buttons, chart, and log.
+// Activities are exclusive (one running at a time); States are independent
+// (any number can run concurrently, toggled individually).
+
+function buildGroupConfig(key, sectionId, chartSectionId, logSectionId) {
+  const sectionEl = document.getElementById(sectionId);
+  const chartSectionEl = document.getElementById(chartSectionId);
+  const logSectionEl = document.getElementById(logSectionId);
+  const categoriesSectionEl = sectionEl.querySelector(":scope > .categories-section");
+
+  return {
+    key,
+    exclusive: key === "activity",
+    sectionEl,
+    mainButtonsEl: categoriesSectionEl.querySelector(":scope > .category-buttons"),
+    toggleMoreBtn: categoriesSectionEl.querySelector(".toggle-more-btn"),
+    moreSectionEl: categoriesSectionEl.querySelector(".more-categories-section"),
+    moreButtonsEl: categoriesSectionEl.querySelector(".more-categories-section .category-buttons"),
+    addFormEl: categoriesSectionEl.querySelector(".add-category-form"),
+    addInputEl: categoriesSectionEl.querySelector(".add-category-form input"),
+    chartSectionEl,
+    svgEl: chartSectionEl.querySelector("svg"),
+    legendEl: chartSectionEl.querySelector(".chart-legend"),
+    pickerEl: chartSectionEl.querySelector(".subcategory-picker"),
+    logSectionEl,
+    listEl: logSectionEl.querySelector(".session-list"),
+    totalEl: logSectionEl.querySelector(".log-total"),
+    emptyEl: logSectionEl.querySelector(".empty-state"),
+    chartType: "pie",
+    chartViewMode: "category",
+    selectedCategoryId: null,
+  };
+}
+
+const GROUPS = {
+  activity: buildGroupConfig("activity", "activities-group", "activities-chart-section", "activities-log-section"),
+  state: buildGroupConfig("state", "states-group", "states-chart-section", "states-log-section"),
+};
+
 // --- Helpers --------------------------------------------------------------
 
-function getRunningSession() {
-  return sessions.find((s) => s.end === null) || null;
+function getRunningSessionsForGroup(group) {
+  return sessions.filter((s) => s.end === null && (s.group || "activity") === group);
 }
 
 function formatClock(ms) {
@@ -235,11 +260,10 @@ function editCategoryLabel(categoryId, newLabel) {
   }
 }
 
-function getCategoriesSortedByRecency() {
+function getCategoriesSortedByRecency(categoryList) {
   // Sort categories by most recent session (returns a new sorted array)
   const categoryLastUsed = {};
 
-  // Find the most recent session for each category
   for (const session of sessions) {
     const catId = session.categoryId || session.category;
     if (!categoryLastUsed[catId] || session.start > categoryLastUsed[catId]) {
@@ -247,39 +271,20 @@ function getCategoriesSortedByRecency() {
     }
   }
 
-  // Create a copy and sort by last usage time
-  return [...categories].sort((a, b) => {
+  return [...categoryList].sort((a, b) => {
     const aTime = categoryLastUsed[a.id] || 0;
     const bTime = categoryLastUsed[b.id] || 0;
     return bTime - aTime;
   });
 }
 
-function getCommonSubcategoriesForCategory(categoryId) {
-  // Get the most recently used subcategories for this category
-  const categorySessionsReversed = sessions
-    .filter((s) => s.categoryId === categoryId)
-    .reverse();
-
-  const subcategoryOrder = [];
-  const seen = new Set();
-
-  for (const session of categorySessionsReversed) {
-    if (session.subcategory && !seen.has(session.subcategory)) {
-      subcategoryOrder.push(session.subcategory);
-      seen.add(session.subcategory);
-      if (subcategoryOrder.length >= 3) break;
-    }
-  }
-
-  return subcategoryOrder;
-}
-
 // --- Chart functions -----------------------------------------------
 
-function getAggregatedData(mode) {
+function getAggregatedData(group, mode, selectedCategoryId) {
   const now = Date.now();
-  const todaySessions = sessions.filter((s) => isSameDay(s.start, now));
+  const todaySessions = sessions.filter(
+    (s) => isSameDay(s.start, now) && (s.group || "activity") === group
+  );
 
   if (mode === "category") {
     const data = {};
@@ -298,39 +303,35 @@ function getAggregatedData(mode) {
       color: getCategoryColor(d.categoryId),
     }));
   } else {
-    // "subcategory" mode: group by category + subcategory, shading
-    // repeated slices of the same category so they stay distinguishable.
+    // "subcategory" mode: scoped to one selected category only, so we're
+    // comparing that category's own breakdown, not every category at once.
+    if (!selectedCategoryId) return [];
+    const relevant = todaySessions.filter(
+      (s) => (s.categoryId || s.category) === selectedCategoryId
+    );
     const data = {};
-    for (const session of todaySessions) {
-      const categoryId = session.categoryId || session.category;
-      const categoryLabel = getCategoryLabel(categoryId);
-      const key = session.subcategory
-        ? `${categoryLabel} • ${session.subcategory}`
-        : categoryLabel;
+    for (const session of relevant) {
+      const key = session.subcategory || "General";
       const duration = (session.end ?? now) - session.start;
-      if (!data[key]) {
-        data[key] = { ms: 0, categoryId };
-      }
-      data[key].ms += duration;
+      data[key] = (data[key] || 0) + duration;
     }
-    const shadeStepByCategory = {};
-    return Object.entries(data).map(([label, d]) => {
-      const step = shadeStepByCategory[d.categoryId] || 0;
-      shadeStepByCategory[d.categoryId] = step + 1;
-      const baseColor = getCategoryColor(d.categoryId);
-      const color = step === 0 ? baseColor : shadeColor(baseColor, step % 2 === 1 ? 0.25 * Math.ceil(step / 2) : -0.25 * (step / 2));
-      return { label, ms: d.ms, color };
-    });
+    const baseColor = getCategoryColor(selectedCategoryId);
+    return Object.entries(data).map(([label, ms], i) => ({
+      label,
+      ms,
+      color: i === 0 ? baseColor : shadeColor(baseColor, i % 2 === 1 ? 0.25 * Math.ceil(i / 2) : -0.25 * (i / 2)),
+    }));
   }
 }
 
-function renderPieChart() {
-  const data = getAggregatedData(chartViewMode);
+function renderPieChart(group) {
+  const g = GROUPS[group];
+  const data = getAggregatedData(group, g.chartViewMode, g.selectedCategoryId);
 
   const total = data.reduce((sum, d) => sum + d.ms, 0);
   if (data.length === 0 || total === 0) {
-    chartSvgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
-    chartLegendEl.innerHTML = "";
+    g.svgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
+    g.legendEl.innerHTML = "";
     return;
   }
 
@@ -341,7 +342,7 @@ function renderPieChart() {
   }));
 
   // Draw pie chart
-  const svg = chartSvgEl;
+  const svg = g.svgEl;
   svg.innerHTML = "";
   const centerX = 200, centerY = 200, radius = 150;
 
@@ -375,16 +376,17 @@ function renderPieChart() {
     currentAngle = endAngle;
   }
 
-  renderChartLegend(slices);
+  renderChartLegend(g.legendEl, slices);
 }
 
-function renderBarChart() {
-  const data = getAggregatedData(chartViewMode);
+function renderBarChart(group) {
+  const g = GROUPS[group];
+  const data = getAggregatedData(group, g.chartViewMode, g.selectedCategoryId);
 
   const total = data.reduce((sum, d) => sum + d.ms, 0);
   if (data.length === 0 || total === 0) {
-    chartSvgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
-    chartLegendEl.innerHTML = "";
+    g.svgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
+    g.legendEl.innerHTML = "";
     return;
   }
 
@@ -394,7 +396,7 @@ function renderBarChart() {
   }));
 
   // Draw bar chart
-  const svg = chartSvgEl;
+  const svg = g.svgEl;
   svg.innerHTML = "";
   svg.setAttribute("viewBox", "0 0 400 300");
 
@@ -419,11 +421,11 @@ function renderBarChart() {
     svg.appendChild(rect);
   });
 
-  renderChartLegend(bars);
+  renderChartLegend(g.legendEl, bars);
 }
 
-function renderChartLegend(items) {
-  chartLegendEl.innerHTML = "";
+function renderChartLegend(legendEl, items) {
+  legendEl.innerHTML = "";
   for (const item of items) {
     const div = document.createElement("div");
     div.className = "legend-item";
@@ -443,120 +445,122 @@ function renderChartLegend(items) {
     div.appendChild(colorBox);
     div.appendChild(label);
     div.appendChild(time);
-    chartLegendEl.appendChild(div);
+    legendEl.appendChild(div);
   }
 }
 
-// --- Modal Logic -------------------------------------------------------
-
-let pendingCategoryIdForModal = null;
-let selectedSubcategoryForModal = null;
-let isEditingRunningSession = false;
-
-function openSubcategoryModal(categoryId, categoryLabel) {
-  const running = getRunningSession();
-  const isRunningCategory = running && running.categoryId === categoryId;
-
-  pendingCategoryIdForModal = categoryId;
-  selectedSubcategoryForModal = isRunningCategory ? running.subcategory : null;
-  detailInputEl.value = isRunningCategory ? running.detail : "";
-  newSubcategoryInputEl.value = "";
-  isEditingRunningSession = isRunningCategory;
-
-  // Update button text
-  startSessionBtnEl.textContent = isEditingRunningSession ? "Update" : "Start";
-
-  modalCategoryTitleEl.textContent = categoryLabel;
-
-  // Show common subcategories
-  const commonSubcategories = getCommonSubcategoriesForCategory(category);
-  commonSubcategoriesListEl.innerHTML = "";
-
-  for (const subcategory of commonSubcategories) {
-    const btn = document.createElement("button");
-    btn.className = "subcategory-btn";
-    btn.type = "button";
-    btn.textContent = subcategory;
-    if (isRunningCategory && subcategory === running.subcategory) {
-      btn.classList.add("selected");
-    }
-    btn.addEventListener("click", () => selectSubcategory(subcategory));
-    commonSubcategoriesListEl.appendChild(btn);
-  }
-
-  modalEl.classList.remove("hidden");
-}
-
-function closeSubcategoryModal() {
-  modalEl.classList.add("hidden");
-  pendingCategoryForModal = null;
-  selectedSubcategoryForModal = null;
-}
-
-function selectSubcategory(subcategory) {
-  selectedSubcategoryForModal = subcategory;
-
-  // Update UI to show selection
-  const buttons = commonSubcategoriesListEl.querySelectorAll(".subcategory-btn");
-  buttons.forEach((btn) => {
-    if (btn.textContent === subcategory) {
-      btn.classList.add("selected");
-    } else {
-      btn.classList.remove("selected");
-    }
-  });
-}
-
-function startSessionFromModal() {
-  if (!pendingCategoryIdForModal) {
-    return;
-  }
-
-  const detail = detailInputEl.value.trim();
-
-  if (isEditingRunningSession) {
-    // Update the running session
-    const running = getRunningSession();
-    if (running) {
-      running.subcategory = selectedSubcategoryForModal || "";
-      running.detail = detail;
-      saveSessions(sessions);
-    }
+function renderChart(group) {
+  const g = GROUPS[group];
+  if (g.chartType === "pie") {
+    renderPieChart(group);
   } else {
-    // Create new session
-    const running = getRunningSession();
-    const now = Date.now();
+    renderBarChart(group);
+  }
+}
 
-    // Stop any running session
-    if (running) {
-      running.end = now;
-    }
+function populateSubcategoryPicker(group) {
+  const g = GROUPS[group];
+  const groupCategories = categories.filter((c) => c.group === group);
+  const sorted = getCategoriesSortedByRecency(groupCategories);
 
-    // Start new session
+  g.pickerEl.innerHTML = "";
+  for (const cat of sorted) {
+    const opt = document.createElement("option");
+    opt.value = cat.id;
+    opt.textContent = cat.label;
+    g.pickerEl.appendChild(opt);
+  }
+
+  if (!g.selectedCategoryId || !sorted.some((c) => c.id === g.selectedCategoryId)) {
+    g.selectedCategoryId = sorted[0] ? sorted[0].id : null;
+  }
+  g.pickerEl.value = g.selectedCategoryId || "";
+}
+
+// --- Actions -------------------------------------------------------
+
+function toggleActivity(cat) {
+  const now = Date.now();
+  const running = getRunningSessionsForGroup("activity")[0] || null;
+
+  if (running && running.categoryId === cat.id) {
+    // Toggle off: stop the running activity
+    running.end = now;
+  } else {
+    // Stop whatever activity was running, then start this one
+    if (running) running.end = now;
     sessions.push({
       id: crypto.randomUUID(),
       start: now,
       end: null,
-      categoryId: pendingCategoryIdForModal,
-      category: pendingCategoryIdForModal, // Keep for backwards compat
-      subcategory: selectedSubcategoryForModal || "",
-      detail: detail,
+      categoryId: cat.id,
+      category: cat.id,
+      group: "activity",
+      subcategory: "",
+      detail: "",
     });
+  }
+  saveSessions(sessions);
+  render();
+}
 
-    saveSessions(sessions);
+function toggleState(cat) {
+  const now = Date.now();
+  const running = sessions.find(
+    (s) => s.end === null && (s.group || "activity") === "state" && s.categoryId === cat.id
+  );
+
+  if (running) {
+    // Toggle off: stop only this state's own session
+    running.end = now;
+  } else {
+    // Start this state independently — no other session is affected
+    sessions.push({
+      id: crypto.randomUUID(),
+      start: now,
+      end: null,
+      categoryId: cat.id,
+      category: cat.id,
+      group: "state",
+      subcategory: "",
+      detail: "",
+    });
+  }
+  saveSessions(sessions);
+  render();
+}
+
+function addCategory(group, inputEl) {
+  const name = inputEl.value.trim();
+  if (!name) return;
+  if (categories.some((c) => c.label === name && c.group === group)) {
+    inputEl.value = "";
+    return;
   }
 
-  closeSubcategoryModal();
+  const countInGroup = categories.filter((c) => c.group === group).length;
+  categories.push({
+    id: crypto.randomUUID(),
+    label: name,
+    group,
+    colorSlot: countInGroup % CATEGORY_PALETTE_SIZE,
+  });
+  saveCategories(categories);
+  inputEl.value = "";
   render();
 }
 
 // --- Rendering --------------------------------------------------------
 
-function renderCategoryButtons(containerEl, categoriesToRender) {
+function renderCategoryButtons(group, containerEl, categoriesToRender) {
   containerEl.innerHTML = "";
-  const running = getRunningSession();
+  const runningActivity = group === "activity" ? getRunningSessionsForGroup("activity")[0] || null : null;
 
   for (const cat of categoriesToRender) {
+    const runningSession = group === "activity"
+      ? (runningActivity && runningActivity.categoryId === cat.id ? runningActivity : null)
+      : sessions.find((s) => s.end === null && (s.group || "activity") === "state" && s.categoryId === cat.id) || null;
+
     const wrapper = document.createElement("div");
     wrapper.className = "category-btn-wrapper";
     wrapper.style.position = "relative";
@@ -565,7 +569,7 @@ function renderCategoryButtons(containerEl, categoriesToRender) {
 
     const btn = document.createElement("button");
     btn.className = "category-btn";
-    if (running && running.categoryId === cat.id) {
+    if (runningSession) {
       btn.classList.add("active");
     }
 
@@ -575,30 +579,19 @@ function renderCategoryButtons(containerEl, categoriesToRender) {
     btn.appendChild(dot);
     btn.appendChild(document.createTextNode(cat.label));
 
+    if (group === "state" && runningSession) {
+      const badge = document.createElement("span");
+      badge.className = "state-duration";
+      badge.dataset.start = runningSession.start;
+      badge.textContent = formatClock(Date.now() - runningSession.start);
+      btn.appendChild(badge);
+    }
+
     btn.addEventListener("click", () => {
-      const running = getRunningSession();
-      if (running && running.categoryId === cat.id) {
-        // Toggle off: stop the running session
-        running.end = Date.now();
-        saveSessions(sessions);
-        render();
+      if (group === "activity") {
+        toggleActivity(cat);
       } else {
-        // Start new session directly (one-click start)
-        const now = Date.now();
-        if (running) {
-          running.end = now;
-        }
-        sessions.push({
-          id: crypto.randomUUID(),
-          start: now,
-          end: null,
-          categoryId: cat.id,
-          category: cat.id,
-          subcategory: "",
-          detail: "",
-        });
-        saveSessions(sessions);
-        render();
+        toggleState(cat);
       }
     });
     wrapper.appendChild(btn);
@@ -643,23 +636,18 @@ function renderCategoryButtons(containerEl, categoriesToRender) {
   }
 }
 
-function renderCategories() {
-  const sorted = getCategoriesSortedByRecency();
+function renderCategoriesForGroup(group) {
+  const g = GROUPS[group];
+  const groupCategories = categories.filter((c) => c.group === group);
+  const sorted = getCategoriesSortedByRecency(groupCategories);
   const recentCategories = sorted.slice(0, 4);
   const olderCategories = sorted.slice(4);
 
-  // Render recent categories in main section
-  renderCategoryButtons(categoryButtonsEl, recentCategories);
+  renderCategoryButtons(group, g.mainButtonsEl, recentCategories);
 
-  // Show/hide "More" button
-  if (olderCategories.length > 0) {
-    toggleMoreCategoriesBtn.style.display = "block";
-  } else {
-    toggleMoreCategoriesBtn.style.display = "none";
-  }
+  g.toggleMoreBtn.style.display = olderCategories.length > 0 ? "block" : "none";
 
-  // Render older categories in expanded section
-  renderCategoryButtons(moreCategoryButtonsEl, olderCategories);
+  renderCategoryButtons(group, g.moreButtonsEl, olderCategories);
 }
 
 function closeEditModal() {
@@ -785,30 +773,16 @@ function deleteEditSession() {
   }
 }
 
-function render() {
-  const running = getRunningSession();
-
-  // Update current category display
-  if (running) {
-    const categoryLabel = getCategoryLabel(running.categoryId || running.category);
-    const subtitle = running.subcategory ? ` / ${running.subcategory}` : "";
-    currentCategoryEl.textContent = categoryLabel + subtitle;
-  } else {
-    currentCategoryEl.textContent = "—";
-  }
-
-  renderCategories();
-  renderChart();
-
-  // Today's sessions, newest first
+function renderLog(group) {
+  const g = GROUPS[group];
   const now = Date.now();
   const todaySessions = sessions
-    .filter((s) => isSameDay(s.start, now))
+    .filter((s) => isSameDay(s.start, now) && (s.group || "activity") === group)
     .slice()
     .reverse();
 
-  sessionListEl.innerHTML = "";
-  emptyStateEl.style.display = todaySessions.length === 0 ? "block" : "none";
+  g.listEl.innerHTML = "";
+  g.emptyEl.style.display = todaySessions.length === 0 ? "block" : "none";
 
   for (const s of todaySessions) {
     const li = document.createElement("li");
@@ -839,102 +813,152 @@ function render() {
     li.appendChild(meta);
     li.appendChild(range);
     li.appendChild(duration);
-    sessionListEl.appendChild(li);
+    g.listEl.appendChild(li);
   }
 
-  // Today's total
   const totalMs = todaySessions.reduce(
     (sum, s) => sum + ((s.end ?? now) - s.start),
     0
   );
-  todayTotalEl.textContent = formatDuration(totalMs);
+  g.totalEl.textContent = formatDuration(totalMs);
+}
+
+function render() {
+  const runningActivity = getRunningSessionsForGroup("activity")[0] || null;
+
+  // Update current activity display
+  if (runningActivity) {
+    const categoryLabel = getCategoryLabel(runningActivity.categoryId || runningActivity.category);
+    const subtitle = runningActivity.subcategory ? ` / ${runningActivity.subcategory}` : "";
+    currentCategoryEl.textContent = categoryLabel + subtitle;
+  } else {
+    currentCategoryEl.textContent = "—";
+  }
+
+  renderCategoriesForGroup("activity");
+  renderCategoriesForGroup("state");
+  renderChart("activity");
+  renderChart("state");
+  renderLog("activity");
+  renderLog("state");
 }
 
 // --- Ticking --------------------------------------------------------
 
 function tick() {
-  const running = getRunningSession();
   const now = Date.now();
+  const runningActivity = getRunningSessionsForGroup("activity")[0] || null;
 
-  if (running) {
-    liveTimerEl.textContent = formatClock(now - running.start);
-
-    // Keep the "now" duration on the running list item fresh too.
-    const runningDurationEl = sessionListEl.querySelector(
-      '.duration[data-running="1"]'
-    );
-    if (runningDurationEl) {
-      const start = Number(runningDurationEl.dataset.start);
-      runningDurationEl.textContent = formatDuration(now - start);
-    }
-
-    // Update today's total
-    const totalMs = sessions
-      .filter((s) => isSameDay(s.start, now))
-      .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0);
-    todayTotalEl.textContent = formatDuration(totalMs);
+  if (runningActivity) {
+    liveTimerEl.textContent = formatClock(now - runningActivity.start);
   } else {
     liveTimerEl.textContent = "00:00:00";
+  }
+
+  // Keep every currently-running row fresh (an Activity plus any number of States)
+  document.querySelectorAll('.duration[data-running="1"]').forEach((el) => {
+    const start = Number(el.dataset.start);
+    el.textContent = formatDuration(now - start);
+  });
+
+  // Keep each active State button's own live badge fresh
+  document.querySelectorAll(".state-duration").forEach((el) => {
+    const start = Number(el.dataset.start);
+    el.textContent = formatClock(now - start);
+  });
+
+  // Keep both groups' totals fresh
+  for (const group of ["activity", "state"]) {
+    const g = GROUPS[group];
+    const totalMs = sessions
+      .filter((s) => isSameDay(s.start, now) && (s.group || "activity") === group)
+      .reduce((sum, s) => sum + ((s.end ?? now) - s.start), 0);
+    g.totalEl.textContent = formatDuration(totalMs);
   }
 }
 
 setInterval(tick, 1000);
 
-// --- Actions -------------------------------------------------------
+// --- Wiring -------------------------------------------------------
 
-function addCategory() {
-  const name = newCategoryInputEl.value.trim();
-  if (!name) return;
-  if (categories.some(c => c.label === name)) {
-    newCategoryInputEl.value = "";
-    return;
-  }
+for (const group of ["activity", "state"]) {
+  const g = GROUPS[group];
 
-  categories.push({
-    id: crypto.randomUUID(),
-    label: name,
-    colorSlot: categories.length % CATEGORY_PALETTE_SIZE,
+  g.addFormEl.addEventListener("submit", (e) => {
+    e.preventDefault();
+    addCategory(group, g.addInputEl);
   });
-  saveCategories(categories);
-  newCategoryInputEl.value = "";
-  render();
+
+  g.toggleMoreBtn.addEventListener("click", () => {
+    g.moreSectionEl.classList.toggle("hidden");
+    g.toggleMoreBtn.textContent = g.moreSectionEl.classList.contains("hidden") ? "More" : "Less";
+  });
+
+  // Edit button click handler using event delegation (covers main + more buttons)
+  g.sectionEl.addEventListener("click", (e) => {
+    const editBtn = e.target.closest(".category-edit-btn");
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      editingCategoryId = editBtn.dataset.categoryId;
+      const currentLabel = editBtn.dataset.categoryLabel;
+      editCategoryInputEl.value = currentLabel;
+      editModalEl.classList.remove("hidden");
+      editCategoryInputEl.focus();
+      editCategoryInputEl.select();
+    }
+  });
+
+  // Chart controls
+  const pieBtn = g.chartSectionEl.querySelector('[data-chart-type="pie"]');
+  const barBtn = g.chartSectionEl.querySelector('[data-chart-type="bar"]');
+  const catBtn = g.chartSectionEl.querySelector('[data-view-mode="category"]');
+  const subBtn = g.chartSectionEl.querySelector('[data-view-mode="subcategory"]');
+
+  pieBtn.addEventListener("click", () => {
+    g.chartType = "pie";
+    pieBtn.classList.add("active");
+    barBtn.classList.remove("active");
+    renderChart(group);
+  });
+
+  barBtn.addEventListener("click", () => {
+    g.chartType = "bar";
+    barBtn.classList.add("active");
+    pieBtn.classList.remove("active");
+    renderChart(group);
+  });
+
+  catBtn.addEventListener("click", () => {
+    g.chartViewMode = "category";
+    catBtn.classList.add("active");
+    subBtn.classList.remove("active");
+    g.pickerEl.classList.add("hidden");
+    renderChart(group);
+  });
+
+  subBtn.addEventListener("click", () => {
+    g.chartViewMode = "subcategory";
+    subBtn.classList.add("active");
+    catBtn.classList.remove("active");
+    populateSubcategoryPicker(group);
+    g.pickerEl.classList.remove("hidden");
+    renderChart(group);
+  });
+
+  g.pickerEl.addEventListener("change", () => {
+    g.selectedCategoryId = g.pickerEl.value;
+    renderChart(group);
+  });
+
+  // Session list click handler using event delegation
+  g.listEl.addEventListener("click", (e) => {
+    const sessionItem = e.target.closest(".session-item");
+    if (sessionItem && sessionItem.dataset.sessionId) {
+      openEditSessionModal(sessionItem.dataset.sessionId);
+    }
+  });
 }
-
-function resetAll() {
-  if (!confirm("Delete all categories and session history? This cannot be undone.")) {
-    return;
-  }
-  sessions = [];
-  categories = [];
-  saveSessions(sessions);
-  saveCategories(categories);
-  render();
-}
-
-addCategoryFormEl.addEventListener("submit", (e) => {
-  e.preventDefault();
-  addCategory();
-});
-
-resetAllBtnEl.addEventListener("click", resetAll);
-
-// Modal actions
-newSubcategoryFormEl.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const name = newSubcategoryInputEl.value.trim();
-  if (!name) return;
-  selectSubcategory(name);
-});
-
-startSessionBtnEl.addEventListener("click", startSessionFromModal);
-modalCloseBtnEl.addEventListener("click", closeSubcategoryModal);
-
-// Close modal on backdrop click
-modalEl.addEventListener("click", (e) => {
-  if (e.target === modalEl) {
-    closeSubcategoryModal();
-  }
-});
 
 // Edit category modal actions
 editCategorySaveBtn.addEventListener("click", saveEditCategory);
@@ -955,67 +979,6 @@ editCategoryInputEl.addEventListener("keypress", (e) => {
   }
 });
 
-// Edit button click handler using event delegation for both sections
-[categoryButtonsEl, moreCategoryButtonsEl].forEach(container => {
-  container.addEventListener("click", (e) => {
-    const editBtn = e.target.closest(".category-edit-btn");
-    if (editBtn) {
-      e.preventDefault();
-      e.stopPropagation();
-      editingCategoryId = editBtn.dataset.categoryId;
-      const currentLabel = editBtn.dataset.categoryLabel;
-      editCategoryInputEl.value = currentLabel;
-      editModalEl.classList.remove("hidden");
-      editCategoryInputEl.focus();
-      editCategoryInputEl.select();
-    }
-  });
-});
-
-// Toggle more categories section
-toggleMoreCategoriesBtn.addEventListener("click", () => {
-  moreCategoriesSectionEl.classList.toggle("hidden");
-  toggleMoreCategoriesBtn.textContent = moreCategoriesSectionEl.classList.contains("hidden") ? "More" : "Less";
-});
-
-function renderChart() {
-  if (chartType === "pie") {
-    renderPieChart();
-  } else {
-    renderBarChart();
-  }
-}
-
-// Chart type toggle
-togglePieChartEl.addEventListener("click", () => {
-  chartType = "pie";
-  togglePieChartEl.classList.add("active");
-  toggleBarChartEl.classList.remove("active");
-  renderChart();
-});
-
-toggleBarChartEl.addEventListener("click", () => {
-  chartType = "bar";
-  toggleBarChartEl.classList.add("active");
-  togglePieChartEl.classList.remove("active");
-  renderChart();
-});
-
-// Chart view mode toggle
-toggleByCategoryEl.addEventListener("click", () => {
-  chartViewMode = "category";
-  toggleByCategoryEl.classList.add("active");
-  toggleBySubcategoryEl.classList.remove("active");
-  renderChart();
-});
-
-toggleBySubcategoryEl.addEventListener("click", () => {
-  chartViewMode = "subcategory";
-  toggleBySubcategoryEl.classList.add("active");
-  toggleByCategoryEl.classList.remove("active");
-  renderChart();
-});
-
 // Edit session modal event listeners
 editSessionStartEl.addEventListener("change", updateSessionDurationDisplay);
 editSessionEndEl.addEventListener("change", updateSessionDurationDisplay);
@@ -1029,14 +992,6 @@ editSessionCloseBtnEl.addEventListener("click", closeEditSessionModal);
 editSessionModalEl.addEventListener("click", (e) => {
   if (e.target === editSessionModalEl) {
     closeEditSessionModal();
-  }
-});
-
-// Session list click handler using event delegation
-sessionListEl.addEventListener("click", (e) => {
-  const sessionItem = e.target.closest(".session-item");
-  if (sessionItem && sessionItem.dataset.sessionId) {
-    openEditSessionModal(sessionItem.dataset.sessionId);
   }
 });
 

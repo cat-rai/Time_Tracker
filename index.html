@@ -11,66 +11,120 @@
   <div class="app">
     <header class="app-header">
       <h1>Time Tracker</h1>
-      <div class="header-right">
-        <div class="date" id="today-date"></div>
-        <button id="reset-all-btn" class="reset-all-btn" title="Clear all categories and session history">Reset</button>
-      </div>
+      <div class="date" id="today-date"></div>
     </header>
 
-    <main class="tracker">
+    <!-- Activities group -->
+    <section class="group-section" id="activities-group">
+      <h2 class="group-title">Activities</h2>
+
       <div class="timer-display">
         <div id="current-category" class="current-category">—</div>
         <div id="live-timer" class="live-timer">00:00:00</div>
       </div>
 
       <div class="categories-section">
-        <div class="category-buttons" id="category-buttons"></div>
-        <button id="toggle-more-categories" class="toggle-more-btn">More</button>
+        <div class="category-buttons"></div>
+        <button class="toggle-more-btn">More</button>
 
-        <div id="more-categories-section" class="more-categories-section hidden">
-          <div class="category-buttons" id="more-category-buttons"></div>
+        <div class="more-categories-section hidden">
+          <div class="category-buttons"></div>
         </div>
 
-        <form id="add-category-form" class="add-category-form">
+        <form class="add-category-form">
           <input
-            id="new-category-input"
             type="text"
-            placeholder="Add category..."
+            placeholder="Add activity..."
             autocomplete="off"
             maxlength="30"
           />
           <button type="submit" class="add-btn">+</button>
         </form>
       </div>
-    </main>
+    </section>
 
-    <section class="chart-section">
+    <section class="chart-section" id="activities-chart-section">
       <div class="chart-header">
-        <h2>Today</h2>
+        <h2>Activities</h2>
         <div style="display: flex; gap: 8px;">
           <div class="chart-toggle">
-            <button id="toggle-pie-chart" class="toggle-btn active">Pie</button>
-            <button id="toggle-bar-chart" class="toggle-btn">Bar</button>
+            <button class="toggle-btn active" data-chart-type="pie">Pie</button>
+            <button class="toggle-btn" data-chart-type="bar">Bar</button>
           </div>
           <div class="chart-toggle">
-            <button id="toggle-by-category" class="toggle-btn active">By Category</button>
-            <button id="toggle-by-subcategory" class="toggle-btn">By Subcategory</button>
+            <button class="toggle-btn active" data-view-mode="category">By Category</button>
+            <button class="toggle-btn" data-view-mode="subcategory">By Subcategory</button>
           </div>
         </div>
       </div>
-      <div id="chart-container" class="chart-container">
-        <svg id="pie-chart" viewBox="0 0 400 400"></svg>
-        <div id="chart-legend" class="chart-legend"></div>
+      <select class="subcategory-picker hidden"></select>
+      <div class="chart-container">
+        <svg viewBox="0 0 400 400"></svg>
+        <div class="chart-legend"></div>
       </div>
     </section>
 
-    <section class="log">
+    <section class="log" id="activities-log-section">
       <div class="log-header">
-        <h2>Sessions</h2>
-        <div class="log-total" id="today-total">0h 0m</div>
+        <h2>Activity Log</h2>
+        <div class="log-total">0h 0m</div>
       </div>
-      <ul id="session-list" class="session-list"></ul>
-      <p id="empty-state" class="empty-state">No sessions yet. Hit Start.</p>
+      <ul class="session-list"></ul>
+      <p class="empty-state">No sessions yet. Hit Start.</p>
+    </section>
+
+    <!-- States group -->
+    <section class="group-section" id="states-group">
+      <h2 class="group-title">States</h2>
+
+      <div class="categories-section">
+        <div class="category-buttons"></div>
+        <button class="toggle-more-btn">More</button>
+
+        <div class="more-categories-section hidden">
+          <div class="category-buttons"></div>
+        </div>
+
+        <form class="add-category-form">
+          <input
+            type="text"
+            placeholder="Add state..."
+            autocomplete="off"
+            maxlength="30"
+          />
+          <button type="submit" class="add-btn">+</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="chart-section" id="states-chart-section">
+      <div class="chart-header">
+        <h2>States</h2>
+        <div style="display: flex; gap: 8px;">
+          <div class="chart-toggle">
+            <button class="toggle-btn active" data-chart-type="pie">Pie</button>
+            <button class="toggle-btn" data-chart-type="bar">Bar</button>
+          </div>
+          <div class="chart-toggle">
+            <button class="toggle-btn active" data-view-mode="category">By Category</button>
+            <button class="toggle-btn" data-view-mode="subcategory">By Subcategory</button>
+          </div>
+        </div>
+      </div>
+      <select class="subcategory-picker hidden"></select>
+      <div class="chart-container">
+        <svg viewBox="0 0 400 400"></svg>
+        <div class="chart-legend"></div>
+      </div>
+    </section>
+
+    <section class="log" id="states-log-section">
+      <div class="log-header">
+        <h2>State Log</h2>
+        <div class="log-total">0h 0m</div>
+      </div>
+      <ul class="session-list"></ul>
+      <p class="empty-state">No sessions yet. Hit Start.</p>
     </section>
   </div>
 
@@ -95,50 +149,6 @@
           <button id="edit-category-save" class="start-session-btn" style="flex: 1;">Save</button>
           <button id="edit-category-cancel" class="modal-close" style="flex: 1; background: var(--surface-2); color: var(--text);">Cancel</button>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Subcategory selection modal -->
-  <div id="subcategory-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="modal-category-title">Category</h2>
-        <button class="modal-close" id="modal-close-btn">×</button>
-      </div>
-
-      <div class="modal-body">
-        <!-- Common subcategories -->
-        <div class="common-subcategories">
-          <div class="section-label">Recently used</div>
-          <div id="common-subcategories-list" class="subcategory-buttons"></div>
-        </div>
-
-        <!-- New subcategory input -->
-        <form id="new-subcategory-form" class="new-subcategory-form">
-          <input
-            id="new-subcategory-input"
-            type="text"
-            placeholder="New subcategory..."
-            autocomplete="off"
-            maxlength="30"
-          />
-          <button type="submit" class="submit-btn">Create</button>
-        </form>
-
-        <!-- Detail/note field -->
-        <div class="detail-section">
-          <label for="detail-input">Details (optional)</label>
-          <input
-            id="detail-input"
-            type="text"
-            placeholder="What are you working on?"
-            maxlength="100"
-          />
-        </div>
-
-        <!-- Start button -->
-        <button id="start-session-btn" class="start-session-btn">Start</button>
       </div>
     </div>
   </div>

@@ -11,7 +11,10 @@
   <div class="app">
     <header class="app-header">
       <h1>Time Tracker</h1>
-      <div class="date" id="today-date"></div>
+      <div class="header-right">
+        <div class="date" id="today-date"></div>
+        <button id="reset-all-btn" class="reset-all-btn" title="Clear all categories and session history">Reset</button>
+      </div>
     </header>
 
     <main class="tracker">
@@ -26,17 +29,18 @@
 
         <div id="more-categories-section" class="more-categories-section hidden">
           <div class="category-buttons" id="more-category-buttons"></div>
-          <form id="add-category-form" class="add-category-form">
-            <input
-              id="new-category-input"
-              type="text"
-              placeholder="Add category..."
-              autocomplete="off"
-              maxlength="30"
-            />
-            <button type="submit" class="add-btn">+</button>
-          </form>
         </div>
+
+        <form id="add-category-form" class="add-category-form">
+          <input
+            id="new-category-input"
+            type="text"
+            placeholder="Add category..."
+            autocomplete="off"
+            maxlength="30"
+          />
+          <button type="submit" class="add-btn">+</button>
+        </form>
       </div>
     </main>
 

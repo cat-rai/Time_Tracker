@@ -56,9 +56,36 @@ html, body {
   margin: 0;
 }
 
+.header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
 .date {
   font-size: 13px;
   color: var(--text-dim);
+}
+
+.reset-all-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--surface-2);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reset-all-btn:active {
+  transform: scale(0.95);
+}
+
+.reset-all-btn:hover {
+  border-color: var(--stop);
+  color: var(--stop);
 }
 
 .tracker {
@@ -120,6 +147,16 @@ html, body {
   transform: scale(0.96);
 }
 
+.category-color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 .category-btn.active {
   background: var(--accent);
   color: #0b0d10;
@@ -130,6 +167,7 @@ html, body {
 .add-category-form {
   display: flex;
   gap: 8px;
+  margin-top: 4px;
 }
 
 #new-category-input {

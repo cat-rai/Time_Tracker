@@ -5,6 +5,40 @@
 const STORAGE_KEY = "time-tracker-sessions";
 const CATEGORIES_KEY = "time-tracker-categories";
 
+// Validated categorical palette (see dataviz skill's validate_palette.js):
+// passes lightness/chroma/CVD/contrast checks against this app's actual
+// dark (#181b21) and light (#f5f6f8) surfaces. Slots are assigned in a
+// fixed order per category (never re-cycled by render position).
+const CATEGORY_COLORS_DARK = [
+  "#3987e5", "#199e70", "#c98500", "#008300",
+  "#9085e9", "#e66767", "#d55181", "#d95926",
+];
+const CATEGORY_COLORS_LIGHT = [
+  "#2a78d6", "#1baf7a", "#eda100", "#008300",
+  "#4a3aa7", "#e34948", "#e87ba4", "#eb6834",
+];
+const CATEGORY_PALETTE_SIZE = CATEGORY_COLORS_DARK.length;
+
+function getCategoryPalette() {
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? CATEGORY_COLORS_DARK
+    : CATEGORY_COLORS_LIGHT;
+}
+
+function shadeColor(hex, percent) {
+  // percent > 0 lightens toward white, < 0 darkens toward black
+  const num = parseInt(hex.slice(1), 16);
+  let r = (num >> 16) & 0xff;
+  let g = (num >> 8) & 0xff;
+  let b = num & 0xff;
+  const target = percent > 0 ? 255 : 0;
+  const amount = Math.abs(percent);
+  r = Math.round(r + (target - r) * amount);
+  g = Math.round(g + (target - g) * amount);
+  b = Math.round(b + (target - b) * amount);
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
 function loadSessions() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -22,10 +56,14 @@ function loadCategories() {
   try {
     const raw = localStorage.getItem(CATEGORIES_KEY);
     const data = raw ? JSON.parse(raw) : [];
-    // Ensure all categories have id and label
-    return data.map(cat =>
-      typeof cat === "string" ? { id: cat, label: cat } : cat
-    );
+    // Ensure all categories have id, label, and a fixed color slot
+    return data.map((cat, i) => {
+      const normalized = typeof cat === "string" ? { id: cat, label: cat } : cat;
+      if (typeof normalized.colorSlot !== "number") {
+        normalized.colorSlot = i % CATEGORY_PALETTE_SIZE;
+      }
+      return normalized;
+    });
   } catch {
     return [];
   }
@@ -92,6 +130,7 @@ const sessionListEl = document.getElementById("session-list");
 const emptyStateEl = document.getElementById("empty-state");
 const todayTotalEl = document.getElementById("today-total");
 const todayDateEl = document.getElementById("today-date");
+const resetAllBtnEl = document.getElementById("reset-all-btn");
 
 // Chart elements
 const chartSvgEl = document.getElementById("pie-chart");
@@ -180,6 +219,13 @@ function getCategoryLabel(categoryId) {
   return cat ? cat.label : categoryId;
 }
 
+function getCategoryColor(categoryId) {
+  const cat = categories.find(c => c.id === categoryId);
+  const palette = getCategoryPalette();
+  const slot = cat && typeof cat.colorSlot === "number" ? cat.colorSlot : 0;
+  return palette[slot % palette.length];
+}
+
 function editCategoryLabel(categoryId, newLabel) {
   const cat = categories.find(c => c.id === categoryId);
   if (cat && newLabel.trim()) {
@@ -231,11 +277,6 @@ function getCommonSubcategoriesForCategory(categoryId) {
 
 // --- Chart functions -----------------------------------------------
 
-const CHART_COLORS = [
-  "#3ddc84", "#2a7f52", "#ff5c5c", "#7f2a2a", "#5c9cff", "#2a4a7f",
-  "#ffd700", "#7f7f2a", "#ff69b4", "#7f2a5c", "#00d4ff", "#2a7f7f",
-];
-
 function getAggregatedData(mode) {
   const now = Date.now();
   const todaySessions = sessions.filter((s) => isSameDay(s.start, now));
@@ -246,11 +287,19 @@ function getAggregatedData(mode) {
       const categoryId = session.categoryId || session.category;
       const categoryLabel = getCategoryLabel(categoryId);
       const duration = (session.end ?? now) - session.start;
-      data[categoryLabel] = (data[categoryLabel] || 0) + duration;
+      if (!data[categoryLabel]) {
+        data[categoryLabel] = { ms: 0, categoryId };
+      }
+      data[categoryLabel].ms += duration;
     }
-    return Object.entries(data).map(([label, ms]) => ({ label, ms }));
+    return Object.entries(data).map(([label, d]) => ({
+      label,
+      ms: d.ms,
+      color: getCategoryColor(d.categoryId),
+    }));
   } else {
-    // "subcategory" mode: group by category + subcategory
+    // "subcategory" mode: group by category + subcategory, shading
+    // repeated slices of the same category so they stay distinguishable.
     const data = {};
     for (const session of todaySessions) {
       const categoryId = session.categoryId || session.category;
@@ -259,27 +308,36 @@ function getAggregatedData(mode) {
         ? `${categoryLabel} • ${session.subcategory}`
         : categoryLabel;
       const duration = (session.end ?? now) - session.start;
-      data[key] = (data[key] || 0) + duration;
+      if (!data[key]) {
+        data[key] = { ms: 0, categoryId };
+      }
+      data[key].ms += duration;
     }
-    return Object.entries(data).map(([label, ms]) => ({ label, ms }));
+    const shadeStepByCategory = {};
+    return Object.entries(data).map(([label, d]) => {
+      const step = shadeStepByCategory[d.categoryId] || 0;
+      shadeStepByCategory[d.categoryId] = step + 1;
+      const baseColor = getCategoryColor(d.categoryId);
+      const color = step === 0 ? baseColor : shadeColor(baseColor, step % 2 === 1 ? 0.25 * Math.ceil(step / 2) : -0.25 * (step / 2));
+      return { label, ms: d.ms, color };
+    });
   }
 }
 
 function renderPieChart() {
   const data = getAggregatedData(chartViewMode);
 
-  if (data.length === 0) {
+  const total = data.reduce((sum, d) => sum + d.ms, 0);
+  if (data.length === 0 || total === 0) {
     chartSvgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
     chartLegendEl.innerHTML = "";
     return;
   }
 
-  // Calculate total and percentages
-  const total = data.reduce((sum, d) => sum + d.ms, 0);
-  const slices = data.map((d, i) => ({
+  // Calculate percentages
+  const slices = data.map((d) => ({
     ...d,
     percent: (d.ms / total) * 100,
-    color: CHART_COLORS[i % CHART_COLORS.length],
   }));
 
   // Draw pie chart
@@ -323,17 +381,16 @@ function renderPieChart() {
 function renderBarChart() {
   const data = getAggregatedData(chartViewMode);
 
-  if (data.length === 0) {
+  const total = data.reduce((sum, d) => sum + d.ms, 0);
+  if (data.length === 0 || total === 0) {
     chartSvgEl.innerHTML = "<text x='200' y='200' text-anchor='middle' fill='var(--text-dim)'>No data yet</text>";
     chartLegendEl.innerHTML = "";
     return;
   }
 
-  const total = data.reduce((sum, d) => sum + d.ms, 0);
-  const bars = data.map((d, i) => ({
+  const bars = data.map((d) => ({
     ...d,
     percent: (d.ms / total) * 100,
-    color: CHART_COLORS[i % CHART_COLORS.length],
   }));
 
   // Draw bar chart
@@ -511,7 +568,13 @@ function renderCategoryButtons(containerEl, categoriesToRender) {
     if (running && running.categoryId === cat.id) {
       btn.classList.add("active");
     }
-    btn.textContent = cat.label;
+
+    const dot = document.createElement("span");
+    dot.className = "category-color-dot";
+    dot.style.backgroundColor = getCategoryColor(cat.id);
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(cat.label));
+
     btn.addEventListener("click", () => {
       const running = getRunningSession();
       if (running && running.categoryId === cat.id) {
@@ -829,10 +892,22 @@ function addCategory() {
 
   categories.push({
     id: crypto.randomUUID(),
-    label: name
+    label: name,
+    colorSlot: categories.length % CATEGORY_PALETTE_SIZE,
   });
   saveCategories(categories);
   newCategoryInputEl.value = "";
+  render();
+}
+
+function resetAll() {
+  if (!confirm("Delete all categories and session history? This cannot be undone.")) {
+    return;
+  }
+  sessions = [];
+  categories = [];
+  saveSessions(sessions);
+  saveCategories(categories);
   render();
 }
 
@@ -840,6 +915,8 @@ addCategoryFormEl.addEventListener("submit", (e) => {
   e.preventDefault();
   addCategory();
 });
+
+resetAllBtnEl.addEventListener("click", resetAll);
 
 // Modal actions
 newSubcategoryFormEl.addEventListener("submit", (e) => {

@@ -151,6 +151,7 @@ const editSessionModalEl = document.getElementById("edit-session-modal");
 const editSessionCategoryEl = document.getElementById("edit-session-category");
 const editSessionStartEl = document.getElementById("edit-session-start");
 const editSessionEndEl = document.getElementById("edit-session-end");
+const editSessionEndRunningEl = document.getElementById("edit-session-end-running");
 const editSessionDurationEl = document.getElementById("edit-session-duration");
 const editSessionSubcategoryEl = document.getElementById("edit-session-subcategory");
 const editSessionDetailEl = document.getElementById("edit-session-detail");
@@ -159,6 +160,7 @@ const editSessionDeleteBtn = document.getElementById("edit-session-delete");
 const editSessionCancelBtn = document.getElementById("edit-session-cancel");
 const editSessionCloseBtnEl = document.getElementById("edit-session-close-btn");
 let editingSessionId = null;
+let editingSessionWasRunning = false;
 
 // --- Group registry -------------------------------------------------------
 // Each group (Activities / States) owns its own buttons, chart, and log.
@@ -675,6 +677,7 @@ function openEditSessionModal(sessionId) {
   if (!session) return;
 
   editingSessionId = sessionId;
+  editingSessionWasRunning = session.end === null;
 
   // Set category
   const categoryLabel = getCategoryLabel(session.categoryId || session.category);
@@ -686,6 +689,11 @@ function openEditSessionModal(sessionId) {
 
   editSessionStartEl.value = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }).substring(0, 5);
   editSessionEndEl.value = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }).substring(0, 5);
+
+  // A running session has no end time yet — editing details shouldn't stop it,
+  // so hide the End Time input and show a "still running" note instead.
+  editSessionEndEl.classList.toggle("hidden", editingSessionWasRunning);
+  editSessionEndRunningEl.classList.toggle("hidden", !editingSessionWasRunning);
 
   // Set subcategory and detail
   editSessionSubcategoryEl.value = session.subcategory || "";
@@ -710,24 +718,28 @@ function updateSessionDurationDisplay() {
 
   // Get the times from input fields and calculate duration
   const startStr = editSessionStartEl.value;
-  const endStr = editSessionEndEl.value;
+  if (!startStr) return;
+  const [startH, startM] = startStr.split(':').map(Number);
+  const startMs = startH * 3600000 + startM * 60000;
 
-  if (startStr && endStr) {
-    // Parse times
-    const [startH, startM] = startStr.split(':').map(Number);
+  let endMs;
+  if (editingSessionWasRunning) {
+    // Still running — preview duration against the current time, but this
+    // is display-only; saving never writes an end time for this session.
+    const now = new Date();
+    endMs = now.getHours() * 3600000 + now.getMinutes() * 60000 + now.getSeconds() * 1000;
+  } else {
+    const endStr = editSessionEndEl.value;
+    if (!endStr) return;
     const [endH, endM] = endStr.split(':').map(Number);
-
-    let startMs = startH * 3600000 + startM * 60000;
-    let endMs = endH * 3600000 + endM * 60000;
-
-    // Handle case where end time is next day
-    if (endMs < startMs) {
-      endMs += 24 * 3600000;
-    }
-
-    const durationMs = endMs - startMs;
-    editSessionDurationEl.textContent = formatDuration(durationMs);
+    endMs = endH * 3600000 + endM * 60000;
   }
+
+  // Handle case where end time is next day
+  let durationMs = endMs - startMs;
+  if (durationMs < 0) durationMs += 24 * 3600000;
+
+  editSessionDurationEl.textContent = formatDuration(durationMs) + (editingSessionWasRunning ? " (ongoing)" : "");
 }
 
 function saveEditSession() {
@@ -738,23 +750,25 @@ function saveEditSession() {
 
   // Parse and set times
   const startStr = editSessionStartEl.value;
-  const endStr = editSessionEndEl.value;
 
-  if (startStr && endStr) {
+  if (startStr) {
     const today = new Date();
     const [startH, startM] = startStr.split(':').map(Number);
-    const [endH, endM] = endStr.split(':').map(Number);
-
     const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), startH, startM);
-    let endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), endH, endM);
-
-    // Handle case where end time is next day
-    if (endDate < startDate) {
-      endDate.setDate(endDate.getDate() + 1);
-    }
-
     session.start = startDate.getTime();
-    session.end = endDate.getTime();
+
+    // Never write an end time for a session that's still running — that's
+    // what was silently stopping the timer when you only meant to edit
+    // the subcategory/detail. It stays running until stopped via its button.
+    if (!editingSessionWasRunning) {
+      const endStr = editSessionEndEl.value;
+      const [endH, endM] = endStr.split(':').map(Number);
+      let endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), endH, endM);
+      if (endDate < startDate) {
+        endDate.setDate(endDate.getDate() + 1);
+      }
+      session.end = endDate.getTime();
+    }
   }
 
   // Update subcategory and detail
